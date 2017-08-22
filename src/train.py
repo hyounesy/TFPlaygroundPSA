@@ -116,10 +116,10 @@ class Classifier:
 
         with tf.name_scope('adam_optimizer'):
             # train_step = tf.train.AdamOptimizer(1e-4).minimize(loss)
-            self.train_step = tf.train.GradientDescentOptimizer(0.5).minimize(loss)
+            self.train_step = tf.train.GradientDescentOptimizer(0.5).minimize(self.loss)
 
         with tf.name_scope('accuracy'):
-            correct_prediction = tf.equal(tf.argmax(yp, 1), tf.argmax(self.y, 1))
+            correct_prediction = tf.equal(tf.argmax(self.yp, 1), tf.argmax(self.y, 1))
             correct_prediction = tf.cast(correct_prediction, tf.float32)
             self.accuracy = tf.reduce_mean(correct_prediction)
 
