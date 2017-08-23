@@ -93,8 +93,7 @@ class DataSet:
         data_neg = (np.random.multivariate_normal((-2, -2), np.identity(INPUT_DIM) * variance, (num_samples // 2)))
         self.points = np.concatenate((data_pos, data_neg))
         # create a one hot array of labels
-        self.labels = np.array([np.ones(len(data_pos)), np.zeros(len(data_neg)),
-                                np.zeros(len(data_pos)), np.ones(len(data_neg))]).reshape(2, -1).transpose()
+        self.labels = np.array([np.zeros(len(data_pos)), np.ones(len(data_neg))]).ravel().astype(int)
         self.shuffle_data()
 
     def shuffle_data(self):
@@ -102,7 +101,7 @@ class DataSet:
         random.shuffle(zipped)
         self.points, self.labels = zip(*zipped)
         self.points = np.array(self.points)
-        self.labels = np.array(self.labels)
+        self.labels = np.array(self.labels).astype(int)
         # print(self.points)
         # print(self.labels)
         # sys.stdout.flush()
@@ -120,10 +119,6 @@ class DataSet:
             self.batch_index += mini_batch_size
             return np.array(points), np.array(labels)
 
-    @staticmethod
-    def one_hot_to_flat(labels_one_hot):
-        return np.sum(labels_one_hot * [0, 1], axis=1)
-
 class Classifier:
     def __init__(self):
         self.batch_size = 10
@@ -131,15 +126,16 @@ class Classifier:
 
     def build(self):
         self.x = tf.placeholder(tf.float32, [None, INPUT_DIM], name='x')  # input data
-        self.y = tf.placeholder(tf.float32, [None, NUM_CLASSES], name='y')  # GT classes
+        self.y = tf.placeholder(tf.uint8, [None], name='y')  # GT classes
+        self.y1h = tf.one_hot(self.y, depth=2, name='y1h')  # GT classes one-hot
 
         self.w = tf.Variable(tf.random_normal([INPUT_DIM, NUM_CLASSES]), name='w-out')
         self.b = tf.Variable(tf.zeros([NUM_CLASSES]), name='b-out')
 
-        self.yp = tf.matmul(self.x, self.w) + self.b #tf.add(tf.matmul(self.x, self.w), self.b, name='y_p')
+        self.yp = tf.matmul(self.x, self.w) + self.b  # tf.add(tf.matmul(self.x, self.w), self.b, name='y_p')
 
         with tf.name_scope('loss'):
-            cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=self.y, logits=self.yp, name='cross_entropy')
+            cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=self.y1h, logits=self.yp, name='cross_entropy')
             self.loss = tf.reduce_mean(cross_entropy, name='loss')
 
         with tf.name_scope('adam_optimizer'):
@@ -147,7 +143,7 @@ class Classifier:
             self.train_step = tf.train.GradientDescentOptimizer(0.5).minimize(self.loss)
 
         with tf.name_scope('accuracy'):
-            correct_prediction = tf.equal(tf.argmax(self.yp, 1), tf.argmax(self.y, 1))
+            correct_prediction = tf.equal(tf.argmax(self.yp, 1), tf.argmax(self.y1h, 1))
             correct_prediction = tf.cast(correct_prediction, tf.float32)
             self.accuracy = tf.reduce_mean(correct_prediction)
 
@@ -191,7 +187,7 @@ if __name__ == '__main__':
     z = classifier.predict_y(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
     fig = plt.figure(figsize=(4, 4), dpi=75)
     plt.contourf(xx, yy, z, cmap=colormap, alpha=0.8)
-    point_color = data.one_hot_to_flat(data.labels)
+    point_color = data.labels
     plt.scatter(data.points[:, 0], data.points[:, 1], c=point_color, s=30, cmap=colormap)
     plt.xlim(x_min, x_max)
     plt.ylim(y_min, y_max)
