@@ -14,7 +14,25 @@
 # ==============================================================================
 
 """
+TODO:
+[ ] training + test
 
+[ ] loss
+
+[ ] learning rate: 0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10
+
+[ ] regularization: None, L1, L2:
+    "none": null,
+    "L1": nn.RegularizationFunction.L1,
+    "L2": nn.RegularizationFunction.L2
+
+[ ] regularization rate: 0, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10
+
+[ ] Activation: tanh, relu, sigmoid, linear
+    "relu": nn.Activations.RELU,
+    "tanh": nn.Activations.TANH,
+    "sigmoid": nn.Activations.SIGMOID,
+    "linear": nn.Activations.LINEAR
 """
 
 from __future__ import absolute_import
@@ -25,6 +43,8 @@ import numpy as np
 import random
 #import sys
 import tempfile
+import matplotlib.pyplot as plt
+import matplotlib
 
 INPUT_DIM = 2
 NUM_CLASSES = 2
@@ -40,8 +60,8 @@ class DataSet:
     DATA_NAMES = [DATA_CIRCLE, DATA_XOR, DATA_GAUSS, DATA_SPIRAL]
 
     def __init__(self, dataset_name, num_samples, noise):
-        self.points = None
-        self.labels = None
+        self.points = None   # 2d point coordinates (x1, x2)
+        self.labels = None   # one-hot class labels
         self.batch_index = 0
         data_gene_func = {
             self.DATA_CIRCLE: self.data_circle,
@@ -72,13 +92,17 @@ class DataSet:
         data_pos = (np.random.multivariate_normal((2, 2), np.identity(INPUT_DIM) * variance, (num_samples // 2)))
         data_neg = (np.random.multivariate_normal((-2, -2), np.identity(INPUT_DIM) * variance, (num_samples // 2)))
         self.points = np.concatenate((data_pos, data_neg))
-        self.labels = np.concatenate((np.ones(len(data_pos)), -np.ones(len(data_pos))))  # class labels
+        # create a one hot array of labels
+        self.labels = np.array([np.ones(len(data_pos)), np.zeros(len(data_neg)),
+                                np.zeros(len(data_pos)), np.ones(len(data_neg))]).reshape(2, -1).transpose()
         self.shuffle_data()
 
     def shuffle_data(self):
         zipped = list(zip(self.points, self.labels))
         random.shuffle(zipped)
         self.points, self.labels = zip(*zipped)
+        self.points = np.array(self.points)
+        self.labels = np.array(self.labels)
         # print(self.points)
         # print(self.labels)
         # sys.stdout.flush()
@@ -94,12 +118,16 @@ class DataSet:
             labels = [self.labels[i % len(self.labels)] for i in range(self.batch_index,
                                                                        self.batch_index + mini_batch_size)]
             self.batch_index += mini_batch_size
-            return points, labels
+            return np.array(points), np.array(labels)
 
+    @staticmethod
+    def one_hot_to_flat(labels_one_hot):
+        return np.sum(labels_one_hot * [0, 1], axis=1)
 
 class Classifier:
     def __init__(self):
         self.batch_size = 10
+        self.session = tf.Session()
 
     def build(self):
         self.x = tf.placeholder(tf.float32, [None, INPUT_DIM], name='x')  # input data
@@ -112,7 +140,7 @@ class Classifier:
 
         with tf.name_scope('loss'):
             cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=self.y, logits=self.yp, name='cross_entropy')
-            self.loss = tf.reduce_mean(cross_entropy, 'loss')
+            self.loss = tf.reduce_mean(cross_entropy, name='loss')
 
         with tf.name_scope('adam_optimizer'):
             # train_step = tf.train.AdamOptimizer(1e-4).minimize(loss)
@@ -130,17 +158,41 @@ class Classifier:
 
     def train(self, data):
         # sess = tf.InteractiveSession()
-        with tf.Session() as sess:
-            sess.run(tf.global_variables_initializer())
-            sess.run(tf.global_variables_initializer())
+        self.session.run(tf.global_variables_initializer())
+        self.session.run(tf.global_variables_initializer())
 
-            for _ in range(1000):
-                batch = data.next_batch(self.batch_size)
-                self.train_step.run(feed_dict={self.x: batch[0], self.y: batch[1]})
-                print(self.accuracy.run(feed_dict={self.x: batch[0], self.y: batch[1]}))
+        for step in range(1000 + 1):
+            batch = data.next_batch(self.batch_size)
+            self.train_step.run(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
+            if step % 100 == 0:
+                train_loss = self.loss.eval(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
+                print('step %d, training loss: %g' % (step, train_loss))
+
+    def predict_y(self, x):
+        yp = self.yp.eval(feed_dict={self.x: x}, session=self.session)
+        return np.argmax(yp, axis=1)
 
 if __name__ == '__main__':
-    data = DataSet(DataSet.DATA_GAUSS, 10, 1)
+    dataset_name = DataSet.DATA_GAUSS
+    data = DataSet(dataset_name, 200, 0.5)
+
     classifier = Classifier()
     classifier.build()
     classifier.train(data)
+
+    # matplotlib.interactive(False)
+    # plot the resulting classifier
+    colormap = matplotlib.colors.ListedColormap(["#f59322", "#e8eaeb", "#0877bd"])
+    h = 0.02
+    x_min, x_max = -6, 6  # data.points[:, 0].min() - 1, data.points[:, 0].max() + 1
+    y_min, y_max = -6, 6  # data.points[:, 1].min() - 1, data.points[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                         np.arange(y_min, y_max, h))
+    z = classifier.predict_y(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
+    fig = plt.figure(figsize=(4, 4), dpi=75)
+    plt.contourf(xx, yy, z, cmap=colormap, alpha=0.8)
+    point_color = data.one_hot_to_flat(data.labels)
+    plt.scatter(data.points[:, 0], data.points[:, 1], c=point_color, s=30, cmap=colormap)
+    plt.xlim(x_min, x_max)
+    plt.ylim(y_min, y_max)
+    fig.savefig(dataset_name + '.png')
