@@ -49,6 +49,7 @@ class Classifier:
         self.regularization_type = self.REGULARIZATION_L1
         self.regularization_rate = 0.1
         self.batch_size = 10
+        self.save_graph = False
 
     def build(self):
         self.x = tf.placeholder(tf.float32, [None, Config.INPUT_DIM], name='x')  # input data
@@ -71,10 +72,10 @@ class Classifier:
                 curr_dim = self.num_hidden_neuron
                 curr_out = self.activation_func[self.activation_h](tf.matmul(curr_out, w_h) + w_b)
 
-                w_out = tf.Variable(tf.random_normal([curr_dim, Config.NUM_CLASSES]), name='w-out')
-                b_out = tf.Variable(tf.zeros([Config.NUM_CLASSES]), name='b-out')
-                self.yp = (tf.matmul(curr_out, w_out) + b_out)  # predicted y
-                activation = tf.nn.tanh(self.yp)
+            w_out = tf.Variable(tf.random_normal([curr_dim, Config.NUM_CLASSES]), name='w-out')
+            b_out = tf.Variable(tf.zeros([Config.NUM_CLASSES]), name='b-out')
+            self.yp = (tf.matmul(curr_out, w_out) + b_out)  # predicted y
+            activation = tf.nn.tanh(self.yp)
 
         with tf.name_scope('loss'):
             cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=self.y1h, logits=activation, name='cross_entropy')
@@ -91,24 +92,26 @@ class Classifier:
             correct_prediction = tf.cast(correct_prediction, tf.float32)
             self.accuracy = tf.reduce_mean(correct_prediction)
 
-        graph_location = tempfile.mkdtemp()
-        print('Saving graph to: %s' % graph_location)
-        train_writer = tf.summary.FileWriter(graph_location)
-        train_writer.add_graph(tf.get_default_graph())
+        if self.save_graph:
+            graph_location = tempfile.mkdtemp()
+            print('Saving graph to: %s' % graph_location)
+            train_writer = tf.summary.FileWriter(graph_location)
+            train_writer.add_graph(tf.get_default_graph())
 
-    def train(self, data):
-        # sess = tf.InteractiveSession()
+    def train(self, data, max_steps = 1001, stat_steps=None):
         self.session.run(tf.global_variables_initializer())
-        self.session.run(tf.global_variables_initializer())
-
         test_data = data.get_test()
-        for step in range(1000 + 1):
+        stats = []
+        for step in range(max_steps):
             batch = data.next_training_batch(self.batch_size)
             self.train_step.run(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
-            if step % 100 == 0:
+            # if step % 100 == 0:
+            if stat_steps is not None and step in stat_steps:
                 train_loss = self.loss.eval(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
                 test_loss = self.loss.eval(feed_dict={self.x: test_data[0], self.y: test_data[1]}, session=self.session)
-                print('step %d, training loss: %g, test loss: %g' % (step, train_loss, test_loss))
+                stats.append({'step': step, 'train_loss': train_loss, 'test_lost': test_loss})
+                #print('step %d, training loss: %g, test loss: %g' % (step, train_loss, test_loss))
+        return stats
 
     def predict_y(self, x):
         yp = self.yp.eval(feed_dict={self.x: x}, session=self.session)

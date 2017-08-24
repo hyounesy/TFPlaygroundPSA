@@ -57,7 +57,21 @@ class DataSet:
         self.shuffle_data()
 
     def data_xor(self, num_samples, noise):
-        pass
+        def get_xor_label(px, py):
+            return 1 if px * py >= 0 else 0
+        self.points = np.zeros([num_samples, 2])
+        self.labels = np.zeros(num_samples).astype(int)
+        for i in range(num_samples):
+            x = random.uniform(-5, 5)
+            padding = 0.3
+            x += padding if x > 0 else -padding
+            y = random.uniform(-5, 5)
+            y += padding if y > 0 else -padding
+            noise_x = random.uniform(-5, 5) * noise
+            noise_y = random.uniform(-5, 5) * noise
+            self.labels[i] = get_xor_label(x + noise_x, y + noise_y)
+            self.points[i] = (x, y)
+        self.shuffle_data()
 
     def data_gauss(self, num_samples, noise):
         """
@@ -78,6 +92,25 @@ class DataSet:
         self.labels = np.array([np.zeros(len(data_pos)), np.ones(len(data_neg))]).ravel().astype(int)
         self.shuffle_data()
 
+    def data_spiral(self, num_samples, noise):
+        half = num_samples // 2
+        self.points = np.zeros([num_samples, 2])
+        self.labels = np.zeros(num_samples).astype(int)
+        for j in range(num_samples):
+            i = j % half
+            label = 1
+            delta = 0
+            if j >= half:  # negative examples
+                label = 0
+                delta = np.pi
+            r = i / half * 5
+            t = 1.75 * i / half * 2 * np.pi + delta
+            x = r * np.sin(t) + random.uniform(-1, 1) * noise
+            y = r * np.cos(t) + random.uniform(-1, 1) * noise
+            self.labels[j] = label
+            self.points[j] = (x, y)
+        self.shuffle_data()
+
     def shuffle_data(self):
         zipped = list(zip(self.points, self.labels))
         random.shuffle(zipped)
@@ -87,9 +120,6 @@ class DataSet:
         # print(self.points)
         # print(self.labels)
         # sys.stdout.flush()
-
-    def data_spiral(self, num_samples, noise):
-        pass
 
     def num_samples(self):
         if self.points is not None:
