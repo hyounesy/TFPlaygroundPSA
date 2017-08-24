@@ -109,7 +109,7 @@ class Classifier:
             if stat_steps is not None and step in stat_steps:
                 train_loss = self.loss.eval(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
                 test_loss = self.loss.eval(feed_dict={self.x: test_data[0], self.y: test_data[1]}, session=self.session)
-                stats.append({'step': step, 'train_loss': train_loss, 'test_lost': test_loss})
+                stats.append({'step': step, 'train_loss': train_loss, 'test_loss': test_loss})
                 #print('step %d, training loss: %g, test loss: %g' % (step, train_loss, test_loss))
         return stats
 

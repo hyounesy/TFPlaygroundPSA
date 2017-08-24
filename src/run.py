@@ -101,10 +101,22 @@ class Run:
 
 if __name__ == '__main__':
     run = Run()
-    for i in range(1):
-        run.randomize()
-        print(run.param_str())
-    run.one_run()
-    run.save_plot(run.dataset_name+".png")
+    with open('../output/runs.txt', 'w') as f:
+        f.write('index' + '\t' +
+                '\t'.join(run.param_names()) + '\t' +
+                '\t'.join(['step', 'train_loss', 'test_loss']) +
+                '\n')
+        index = 0
+        for i in range(20):
+            run.randomize()
+            stats = run.one_run()
+            for stat in stats:
+                f.write(str(index) + '\t' +
+                        run.param_str() + '\t' +
+                        '\t'.join([str(stat['step']), str(stat['train_loss']), str(stat['test_loss'])]) +
+                        '\n')
+                index += 1
+            # print(run.param_str())
+            run.save_plot('../output/images/' + str(index - 1)+".png")
 
 
