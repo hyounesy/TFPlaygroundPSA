@@ -13,47 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
-TODO:
-[ ] training + test
-
-[ ] loss
-
-[ ] learning rate: 0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10
-
-[ ] regularization: None, L1, L2:
-    "none": null,
-    "L1": nn.RegularizationFunction.L1,
-    "L2": nn.RegularizationFunction.L2
-
-[ ] regularization rate: 0, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10
-
-[ ] Activation nad outputActivation: tf.nn.tanh, tf.nn.relu, tf.nn.sigmoid, linear (none)
-    "relu": nn.Activations.RELU,
-    "tanh": nn.Activations.TANH,
-    "sigmoid": nn.Activations.SIGMOID,
-    "linear": nn.Activations.LINEAR
-
-[ ] outputActivation = nn.Activations.TANH
-"""
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 import tempfile
-import matplotlib.pyplot as plt
-import matplotlib
-from matplotlib import colors
 from dataset import DataSet
 from config import Config
-
-batch_size = 30
-dataset_name = DataSet.DATA_CIRCLE
-num_samples = 100
-noise = 0.0
-
 
 class Classifier:
     ACTIVATION_RELU = 'ReLU'
@@ -81,6 +48,7 @@ class Classifier:
         self.activation_h = self.ACTIVATION_TANH  # activaion function for hidden layers
         self.regularization_type = self.REGULARIZATION_L1
         self.regularization_rate = 0.1
+        self.batch_size = 10
 
     def build(self):
         self.x = tf.placeholder(tf.float32, [None, Config.INPUT_DIM], name='x')  # input data
@@ -135,7 +103,7 @@ class Classifier:
 
         test_data = data.get_test()
         for step in range(1000 + 1):
-            batch = data.next_training_batch(batch_size)
+            batch = data.next_training_batch(self.batch_size)
             self.train_step.run(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
             if step % 100 == 0:
                 train_loss = self.loss.eval(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
@@ -145,28 +113,3 @@ class Classifier:
     def predict_y(self, x):
         yp = self.yp.eval(feed_dict={self.x: x}, session=self.session)
         return np.argmax(yp, axis=1)
-
-if __name__ == '__main__':
-
-    data = DataSet(dataset_name, num_samples, noise)
-
-    classifier = Classifier()
-    classifier.build()
-    classifier.train(data)
-
-    # matplotlib.interactive(False)
-    # plot the resulting classifier
-    colormap = colors.ListedColormap(["#f59322", "#e8eaeb", "#0877bd"])
-    x_min, x_max = -6, 6  # data.points[:, 0].min() - 1, data.points[:, 0].max() + 1
-    y_min, y_max = -6, 6  # data.points[:, 1].min() - 1, data.points[:, 1].max() + 1
-    xx, yy = np.meshgrid(np.linspace(x_min, x_max, 300),
-                         np.linspace(y_min, y_max, 300))
-    z = classifier.predict_y(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
-    fig = plt.figure(figsize=(4, 4), dpi=75)
-    #plt.imshow(z, cmap=colormap, interpolation='nearest')
-    plt.contourf(xx, yy, z, cmap=colormap, alpha=0.8)
-    point_color = data.labels
-    plt.scatter(data.points[:, 0], data.points[:, 1], c=point_color, s=30, cmap=colormap)
-    plt.xlim(x_min, x_max)
-    plt.ylim(y_min, y_max)
-    fig.savefig(dataset_name + '.png')
