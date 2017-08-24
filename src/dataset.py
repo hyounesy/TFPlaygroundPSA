@@ -8,19 +8,20 @@ class DataSet:
     DATA_XOR = "xor"
     DATA_GAUSS = "gauss"
     DATA_SPIRAL = "spiral"
-    DATA_NAMES = [DATA_CIRCLE, DATA_XOR, DATA_GAUSS, DATA_SPIRAL]
+    data_names = [DATA_CIRCLE, DATA_XOR, DATA_GAUSS, DATA_SPIRAL]
 
     def __init__(self, dataset_name, num_samples, noise):
         self.points = None   # 2d point coordinates (x1, x2)
         self.labels = None   # one-hot class labels
+        self.training_ratio = 0.5  # ration of training to test
         self.batch_index = 0
-        data_gene_func = {
+        data_gen_func = {
             self.DATA_CIRCLE: self.data_circle,
             self.DATA_XOR: self.data_xor,
             self.DATA_GAUSS: self.data_gauss,
             self.DATA_SPIRAL: self.data_spiral
         }
-        data_gene_func[dataset_name](num_samples, noise)
+        data_gen_func[dataset_name](num_samples, noise)
 
     def data_circle(self, num_samples, noise):
         self.points = np.zeros([num_samples, 2])
@@ -90,13 +91,33 @@ class DataSet:
     def data_spiral(self, num_samples, noise):
         pass
 
-    def next_batch(self, mini_batch_size):
-        while True:
-            assert(len(self.points) == len(self.labels))
-            points = [self.points[i % len(self.points)] for i in range(self.batch_index,
-                                                                       self.batch_index + mini_batch_size)]
-            labels = [self.labels[i % len(self.labels)] for i in range(self.batch_index,
-                                                                       self.batch_index + mini_batch_size)]
-            self.batch_index += mini_batch_size
-            return np.array(points), np.array(labels)
+    def num_samples(self):
+        if self.points is not None:
+            return len(self.points)
+        return 0
+
+    def num_training(self):
+        return int(self.num_samples() * self.training_ratio)
+
+    def next_training_batch(self, mini_batch_size):
+        """
+        returns next training batch
+        :param mini_batch_size:
+        :return:
+        """
+        num_training = self.num_training()
+        assert(len(self.points) == len(self.labels))
+        points = [self.points[i % num_training] for i in range(self.batch_index,
+                                                               self.batch_index + mini_batch_size)]
+        labels = [self.labels[i % num_training] for i in range(self.batch_index,
+                                                               self.batch_index + mini_batch_size)]
+        self.batch_index += mini_batch_size
+        return np.array(points), np.array(labels).astype(int)
+
+    def get_test(self):
+        num_training = self.num_training()
+        return self.points[num_training:], self.labels[num_training:]
+
+
+
 
