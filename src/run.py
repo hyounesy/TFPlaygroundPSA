@@ -39,6 +39,10 @@ class Run:
     range_hidden = [0, 6]
     range_hidden_neuron = [1, 8]
 
+    MODE_FULL = 'full'  # a single directory, with randomized data for each run
+    MODE_PSA_RUNS = 'psa_runs'  # a few randomized data, in separate directories
+
+
     def __init__(self):
         # dataset parameters
         #self.dataset_name = DataSet.DATA_CIRCLE
@@ -75,11 +79,6 @@ class Run:
         self.classifier.regularization_rate = random.choice(self.regularization_rates)
         self.classifier.build()
 
-    def one_run(self):
-        stats = self.classifier.train(self.data, max_steps = 4001, stat_steps=[100, 500, 1000, 2000, 4000])
-        # print(stats)
-        return stats
-
     def param_str(self):
         return "\t".join([self.data.dataset_name,
                           '{:0.2f}'.format(self.data.noise),
@@ -96,6 +95,11 @@ class Run:
         return ['dataset','noise', 'batch_size', 'learning_rate', 'hidden_layers', 'neurons', 'activation', 'regularization', 'regularization_rate']
 
     def save_plot(self, filename):
+        """
+        Generates the plot using the current data and training state
+        :param filename: output filename
+        :return: None
+        """
         # matplotlib.interactive(False)
         # plot the resulting classifier
         colormap = colors.ListedColormap(["#f59322", "#e8eaeb", "#0877bd"])
@@ -112,28 +116,33 @@ class Run:
         plt.xlim(x_min, x_max)
         plt.ylim(y_min, y_max)
         fig.savefig(filename)
+        plt.close()
 
     @staticmethod
     def create_dir(dirname):
         if not os.path.exists(dirname):
             os.makedirs(dirname)
 
-    def execute_runs(self):
-        mode_full = 'full'  # a single directory, with randomized data for each run
-        mode_psa_runs = 'psa_runs'  # a few randomized data, in separate directories
-        mode = mode_psa_runs
+    def execute_runs(self, mode, num_runs):
+        """
+        Executes several training runs, each with different parameters and saves the results
+        :param mode: experiment mode.
+            MODE_FULL randomizes all parameters including the input data, per run
+            MODE_PSA_RUNS generates different datasets and runs the psa separately for each
+        :param num_runs: number of runs per experiment
+        :return:
+        """
 
         iter_index = -1
         while True:
             iter_index += 1
-            if mode == mode_full:
+            if mode == self.MODE_FULL:
                 if iter_index == 1:
                     break
                 out_dir = '../output/full'
                 self.create_dir(out_dir)
-                num_runs = 100
                 curr_data = None
-            elif mode == mode_psa_runs:
+            elif mode == self.MODE_PSA_RUNS:
                 if iter_index >= len(DataSet.data_names):
                     break
                 noise = 0.25
@@ -142,7 +151,9 @@ class Run:
                 self.create_dir(out_dir)
                 curr_data = DataSet(dataset_name, num_samples=Run.num_samples, noise=noise)
                 curr_data.save_to_file(out_dir + '/input.txt')
-                num_runs = 2
+            else:
+                print("Invalid mode:" + str(mode))
+                return
 
             # create write the header for the runs.txt file
             f_runs = open(out_dir + '/runs.txt', 'w')
@@ -159,29 +170,40 @@ class Run:
             row_index = 0
             for i in range(num_runs):
                 if curr_data is None:
-                    self.randomize_data()
+                    self.randomize_data()  # randomize the data every time
                 else:
-                    self.data = curr_data
+                    self.data = curr_data  # reuse the same data
                 self.randomize_training_params()
-                stats = self.one_run()
-                image_filename = images_dir + '/' + str(row_index) + ".png"
-                for stat in stats:
+
+                prev_step = 0
+                for step in [100, 500, 1000, 2000, 4000]:
+                    test_loss, train_loss = self.classifier.train(self.data, restart=False, num_steps=step - prev_step)
+                    image_filename = images_dir + '/' + str(row_index) + ".png"
                     f_runs.write('\t'.join([str(row_index), image_filename]) + '\t' +
                                  self.param_str() + '\t' +
-                                 '\t'.join([str(stat['step']), str(stat['train_loss']), str(stat['test_loss'])]) +
+                                 '\t'.join([str(step), str(train_loss), str(test_loss)]) +
                                  '\n')
                     row_index += 1
+                    self.save_plot(image_filename)
+                    prev_step = step
                 print(self.param_str())
-                self.save_plot(image_filename)
 
 
 if __name__ == '__main__':
     run = Run()
-    run.execute_runs()
+    run.execute_runs(run.MODE_FULL, 10)
+
 
 """
-PSA TODO:
+TODO:
+measure time
+output runs/
+x1, x2, ...
+
+
+VisRseq TODO:
 imagepath relative to data
 index.txt -> runs.txt
+
 
 """

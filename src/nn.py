@@ -100,20 +100,28 @@ class Classifier:
             train_writer = tf.summary.FileWriter(graph_location)
             train_writer.add_graph(tf.get_default_graph())
 
-    def train(self, data, max_steps = 1001, stat_steps=None):
         self.session.run(tf.global_variables_initializer())
+
+    def train(self, data, restart=True, num_steps=1000):
+        """
+        Runs the classifier for a certain number of steps
+        :param data: the input data (training+test)
+        :param restart: whether to restart the classfier (reinitialize weights)
+        :param num_steps: number of steps to run the classifier
+        :return: train_loss, test_loss
+        """
+        if restart:
+            tf.initialize_all_variables()
+
         test_data = data.get_test(self.training_ratio)
-        stats = []
-        for step in range(max_steps):
+        for step in range(num_steps):
             batch = data.next_training_batch(self.training_ratio, self.batch_size)
             self.train_step.run(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
-            # if step % 100 == 0:
-            if stat_steps is not None and step in stat_steps:
-                train_loss = self.loss.eval(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
-                test_loss = self.loss.eval(feed_dict={self.x: test_data[0], self.y: test_data[1]}, session=self.session)
-                stats.append({'step': step, 'train_loss': train_loss, 'test_loss': test_loss})
-                #print('step %d, training loss: %g, test loss: %g' % (step, train_loss, test_loss))
-        return stats
+
+        train_loss = self.loss.eval(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
+        test_loss = self.loss.eval(feed_dict={self.x: test_data[0], self.y: test_data[1]}, session=self.session)
+        #print('step %d, training loss: %g, test loss: %g' % (step, train_loss, test_loss))
+        return train_loss, test_loss
 
     def predict_y(self, x):
         yp = self.yp.eval(feed_dict={self.x: x}, session=self.session)
