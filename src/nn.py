@@ -1,3 +1,4 @@
+# ==============================================================================
 # Copyright 2017 Hamid Younesy. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,6 +43,7 @@ class Classifier:
             self.ACTIVATION_SIGMOID: tf.nn.sigmoid,
             self.ACTIVATION_LINEAR: lambda x: x,
         }
+        self.training_ratio = 0.5  # ratio of training to test
         self.learning_rate = 0.3
         self.num_hidden = 1  # number of hidden layers
         self.num_hidden_neuron = 4  # number of neurons in each hidden layer
@@ -100,10 +102,10 @@ class Classifier:
 
     def train(self, data, max_steps = 1001, stat_steps=None):
         self.session.run(tf.global_variables_initializer())
-        test_data = data.get_test()
+        test_data = data.get_test(self.training_ratio)
         stats = []
         for step in range(max_steps):
-            batch = data.next_training_batch(self.batch_size)
+            batch = data.next_training_batch(self.training_ratio, self.batch_size)
             self.train_step.run(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
             # if step % 100 == 0:
             if stat_steps is not None and step in stat_steps:

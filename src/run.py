@@ -1,3 +1,22 @@
+# ==============================================================================
+# Copyright 2017 Hamid Younesy. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 import numpy as np
 import matplotlib.pyplot as plt
 #import matplotlib
@@ -5,12 +24,13 @@ from matplotlib import colors
 from dataset import DataSet
 from nn import Classifier
 import random
+import os
 
 class Run:
     """
     A single run
     """
-    num_samples = 200
+    num_samples = 200 # always fixed
     range_noise = [0.0, 0.5]
     range_training_ratio = [0.1, 0.9]
     range_batch_size = [1, 30]
@@ -21,8 +41,8 @@ class Run:
 
     def __init__(self):
         # dataset parameters
-        self.dataset_name = DataSet.DATA_CIRCLE
-        self.noise = 0.0
+        #self.dataset_name = DataSet.DATA_CIRCLE
+        #self.noise = 0.0
         self.training_ratio = 0.5
         # classifier parameters
         self.batch_size = 10
@@ -32,50 +52,44 @@ class Run:
         self.activation_h = Classifier.ACTIVATION_TANH  # activaion function for hidden layers
         self.regularization_type = Classifier.REGULARIZATION_NONE
         self.regularization_rate = 0.0
+
         self.data = None
         self.classifier = None
 
-    def randomize(self):
+    def randomize_data(self, dataset_name=None, noise=None):
         # dataset parameters
-        self.dataset_name = random.choice(DataSet.data_names)
-        self.noise = random.uniform(*self.range_noise)
-        self.training_ratio = random.uniform(*self.range_training_ratio)
-        # classifier parameters
-        self.batch_size = random.randint(*self.range_batch_size)
-        self.learning_rate = random.choice(self.learning_rates)
-        self.num_hidden = random.randint(*self.range_hidden)
-        self.num_hidden_neuron = random.randint(*self.range_hidden_neuron) if self.num_hidden > 0 else 0
-        self.activation_h = random.choice(Classifier.activations_names)
-        self.regularization_type = random.choice(Classifier.regularization_names)
-        self.regularization_rate = random.choice(self.regularization_rates)
+        dataset_name = random.choice(DataSet.data_names) if dataset_name is None else dataset_name
+        noise = random.uniform(*self.range_noise) if noise is None else noise
+        self.data = DataSet(dataset_name, self.num_samples, noise)
 
-    def one_run(self):
-        self.data = DataSet(self.dataset_name, self.num_samples, self.noise)
-        self.data.training_ratio = self.training_ratio
+    def randomize_training_params(self):
+        # classifier parameters
         self.classifier = Classifier()
-        self.classifier.batch_size = self.batch_size
-        self.classifier.learning_rate = self.learning_rate
-        self.classifier.num_hidden = self.num_hidden
-        self.classifier.num_hidden_neuron = self.num_hidden_neuron
-        self.classifier.activation_h = self.activation_h
-        self.classifier.regularization_type = self.regularization_type
-        self.classifier.regularization_rate = self.regularization_rate
+        self.classifier.training_ratio = random.uniform(*self.range_training_ratio)
+        self.classifier.batch_size = random.randint(*self.range_batch_size)
+        self.classifier.learning_rate = random.choice(self.learning_rates)
+        self.classifier.num_hidden = random.randint(*self.range_hidden)
+        self.classifier.num_hidden_neuron = random.randint(*self.range_hidden_neuron) if self.num_hidden > 0 else 0
+        self.classifier.activation_h = random.choice(Classifier.activations_names)
+        self.classifier.regularization_type = random.choice(Classifier.regularization_names)
+        self.classifier.regularization_rate = random.choice(self.regularization_rates)
         self.classifier.build()
 
+    def one_run(self):
         stats = self.classifier.train(self.data, max_steps = 4001, stat_steps=[100, 500, 1000, 2000, 4000])
         # print(stats)
         return stats
 
     def param_str(self):
-        return "\t".join([self.dataset_name,
-                          '{:0.2f}'.format(self.noise),
-                          str(self.batch_size),
-                          str(self.learning_rate),
-                          str(self.num_hidden),
-                          str(self.num_hidden_neuron),
-                          self.activation_h,
-                          self.regularization_type,
-                          str(self.regularization_rate)
+        return "\t".join([self.data.dataset_name,
+                          '{:0.2f}'.format(self.data.noise),
+                          str(self.classifier.batch_size),
+                          str(self.classifier.learning_rate),
+                          str(self.classifier.num_hidden),
+                          str(self.classifier.num_hidden_neuron),
+                          self.classifier.activation_h,
+                          self.classifier.regularization_type,
+                          str(self.classifier.regularization_rate)
                           ])
 
     def param_names(self):
@@ -99,24 +113,75 @@ class Run:
         plt.ylim(y_min, y_max)
         fig.savefig(filename)
 
+    @staticmethod
+    def create_dir(dirname):
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
+    def execute_runs(self):
+        mode_full = 'full'  # a single directory, with randomized data for each run
+        mode_psa_runs = 'psa_runs'  # a few randomized data, in separate directories
+        mode = mode_psa_runs
+
+        iter_index = -1
+        while True:
+            iter_index += 1
+            if mode == mode_full:
+                if iter_index == 1:
+                    break
+                out_dir = '../output/full'
+                self.create_dir(out_dir)
+                num_runs = 100
+                curr_data = None
+            elif mode == mode_psa_runs:
+                if iter_index >= len(DataSet.data_names):
+                    break
+                noise = 0.25
+                dataset_name = DataSet.data_names[iter_index]
+                out_dir = '../output/' + dataset_name + '_25'
+                self.create_dir(out_dir)
+                curr_data = DataSet(dataset_name, num_samples=Run.num_samples, noise=noise)
+                curr_data.save_to_file(out_dir + '/input.txt')
+                num_runs = 2
+
+            # create write the header for the runs.txt file
+            f_runs = open(out_dir + '/runs.txt', 'w')
+            f_runs.write('\t'.join(['ID', 'imagePath']) + '\t' +
+                         '\t'.join(self.param_names()) + '\t' +
+                         '\t'.join(['step', 'train_loss', 'test_loss']) +
+                         '\n')
+
+            images_dir = out_dir + '/images'
+            runs_dir = out_dir + '/runs'
+            self.create_dir(images_dir)
+            self.create_dir(runs_dir)
+
+            row_index = 0
+            for i in range(num_runs):
+                if curr_data is None:
+                    self.randomize_data()
+                else:
+                    self.data = curr_data
+                self.randomize_training_params()
+                stats = self.one_run()
+                image_filename = images_dir + '/' + str(row_index) + ".png"
+                for stat in stats:
+                    f_runs.write('\t'.join([str(row_index), image_filename]) + '\t' +
+                                 self.param_str() + '\t' +
+                                 '\t'.join([str(stat['step']), str(stat['train_loss']), str(stat['test_loss'])]) +
+                                 '\n')
+                    row_index += 1
+                print(self.param_str())
+                self.save_plot(image_filename)
+
+
 if __name__ == '__main__':
     run = Run()
-    with open('../output/runs.txt', 'w') as f:
-        f.write('index' + '\t' +
-                '\t'.join(run.param_names()) + '\t' +
-                '\t'.join(['step', 'train_loss', 'test_loss']) +
-                '\n')
-        index = 0
-        for i in range(20):
-            run.randomize()
-            stats = run.one_run()
-            for stat in stats:
-                f.write(str(index) + '\t' +
-                        run.param_str() + '\t' +
-                        '\t'.join([str(stat['step']), str(stat['train_loss']), str(stat['test_loss'])]) +
-                        '\n')
-                index += 1
-            # print(run.param_str())
-            run.save_plot('../output/images/' + str(index - 1)+".png")
+    run.execute_runs()
 
+"""
+PSA TODO:
+imagepath relative to data
+index.txt -> runs.txt
 
+"""

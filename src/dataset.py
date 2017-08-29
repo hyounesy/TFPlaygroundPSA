@@ -1,3 +1,22 @@
+# ==============================================================================
+# Copyright 2017 Hamid Younesy. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 import numpy as np
 import random
 from config import Config
@@ -13,8 +32,9 @@ class DataSet:
     def __init__(self, dataset_name, num_samples, noise):
         self.points = None   # 2d point coordinates (x1, x2)
         self.labels = None   # one-hot class labels
-        self.training_ratio = 0.5  # ration of training to test
         self.batch_index = 0
+        self.dataset_name = dataset_name
+        self.noise = noise
         data_gen_func = {
             self.DATA_CIRCLE: self.data_circle,
             self.DATA_XOR: self.data_xor,
@@ -126,16 +146,13 @@ class DataSet:
             return len(self.points)
         return 0
 
-    def num_training(self):
-        return int(self.num_samples() * self.training_ratio)
-
-    def next_training_batch(self, mini_batch_size):
+    def next_training_batch(self, training_ratio, mini_batch_size):
         """
         returns next training batch
         :param mini_batch_size:
         :return:
         """
-        num_training = self.num_training()
+        num_training = int(self.num_samples() * training_ratio)
         assert(len(self.points) == len(self.labels))
         points = [self.points[i % num_training] for i in range(self.batch_index,
                                                                self.batch_index + mini_batch_size)]
@@ -144,9 +161,16 @@ class DataSet:
         self.batch_index += mini_batch_size
         return np.array(points), np.array(labels).astype(int)
 
-    def get_test(self):
-        num_training = self.num_training()
+    def get_test(self, training_ratio):
+        num_training = int(self.num_samples() * training_ratio)
         return self.points[num_training:], self.labels[num_training:]
+
+    def save_to_file(self, filename):
+        with open(filename, 'w') as f:
+            f.write('\t'.join(['x1', 'x2', 'label']) + '\n')
+            for i in range(self.num_samples()):
+                f.write('\t'.join([str(self.points[i][0]), str(self.points[i][1]), str(self.labels[i])])+ '\n')
+
 
 
 
