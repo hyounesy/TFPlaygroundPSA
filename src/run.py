@@ -34,7 +34,7 @@ class Run:
     A single run
     """
     num_samples = 200 # always fixed
-    range_noise = [0.0, 0.5]
+    range_noise = [0, 50]
     range_training_ratio = [0.1, 0.9]
     range_batch_size = [1, 30]
     learning_rates = [0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
@@ -65,7 +65,7 @@ class Run:
     def randomize_data(self, dataset_name=None, noise=None):
         # dataset parameters
         dataset_name = random.choice(DataSet.all_data_names) if dataset_name is None else dataset_name
-        noise = random.uniform(*self.range_noise) if noise is None else noise
+        noise = random.randint(*self.range_noise) if noise is None else noise
         self.data = DataSet(dataset_name, self.num_samples, noise)
 
     def randomize_training_params(self):
@@ -86,20 +86,23 @@ class Run:
         self.classifier.features_ids = feature_ids
         self.classifier.build()
 
-    def param_str(self):
-        return '\t'.join([self.data.dataset_name,
-                          '{:0.2f}'.format(self.data.noise),
-                          str(self.classifier.batch_size),
-                          str(self.classifier.learning_rate),
-                          str(self.classifier.num_hidden),
-                          str(self.classifier.num_hidden_neuron),
-                          self.classifier.activation_h,
-                          self.classifier.regularization_type,
-                          str(self.classifier.regularization_rate)
-                          ])
-
     def param_names(self):
-        return ['dataset', 'noise', 'batch_size', 'learning_rate', 'hidden_layers', 'neurons', 'activation', 'regularization', 'regularization_rate']
+        return ['dataset', 'noise', 'batch_size'] + \
+               DataSet.feature_idx_to_name + \
+               ['learning_rate', 'hidden_layers', 'neurons', 'activation', 'regularization', 'regularization_rate']
+
+    def param_str(self):
+        row_str = [self.data.dataset_name,
+                   '{:0.2f}'.format(self.data.noise),
+                   str(self.classifier.batch_size)] + \
+                  ['1' if i in self.classifier.features_ids else '0' for i in DataSet.all_features] + \
+                  [str(self.classifier.learning_rate),
+                   str(self.classifier.num_hidden),
+                   str(self.classifier.num_hidden_neuron),
+                   self.classifier.activation_h,
+                   self.classifier.regularization_type,
+                   str(self.classifier.regularization_rate)]
+        return '\t'.join(row_str)
 
     def save_plot(self, filename):
         """
@@ -165,9 +168,9 @@ class Run:
             elif mode == self.MODE_PSA_RUNS:
                 if iter_index >= len(DataSet.all_data_names):
                     break
-                noise = 0.25
+                noise = 25
                 dataset_name = DataSet.all_data_names[iter_index]
-                out_dir = '../output/' + dataset_name + '_25'
+                out_dir = '../output/' + dataset_name + '_' + str(noise)
                 self.create_dir(out_dir, clean=True)
                 curr_data = DataSet(dataset_name, num_samples=Run.num_samples, noise=noise)
                 curr_data.save_to_file(out_dir + '/input.txt')
@@ -218,11 +221,8 @@ if __name__ == '__main__':
 TODO:
 measure time
 output runs/
-output x1, x2, x1.x2...
 epoch != step?
-show test data
-[ ] descretise output?
-noise mapping: 0-50
+plot: show test data
 for mode=full, pregenerate several datasets with different noise levels 0, 10, 20, 30, 40, 50
 
 VisRseq TODO:
