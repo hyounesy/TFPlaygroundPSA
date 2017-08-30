@@ -47,19 +47,26 @@ class Classifier:
         self.learning_rate = 0.3
         self.num_hidden = 1  # number of hidden layers
         self.num_hidden_neuron = 4  # number of neurons in each hidden layer
-        self.activation_h = self.ACTIVATION_TANH  # activaion function for hidden layers
+        self.activation_h = self.ACTIVATION_TANH  # activation function for hidden layers
         self.regularization_type = self.REGULARIZATION_L1
         self.regularization_rate = 0.1
         self.batch_size = 10
         self.save_graph = False
+        self.features_ids = [DataSet.FEATURE_X1, DataSet.FEATURE_X2]  # list of selected feature IDs
 
     def build(self):
-        self.x = tf.placeholder(tf.float32, [None, Config.INPUT_DIM], name='x')  # input data
+        num_selected_features = len(self.features_ids)
+
+        # mask = [i in self.selected_features_ids for i in range(DataSet.NUM_FEATURES)]
+        # self.all_features = tf.placeholder(tf.float32, [None, DataSet.NUM_FEATURES], name='all_features')
+        # self.features = tf.boolean_mask(self.features, mask, name='selected_features')
+
+        self.features = tf.placeholder(tf.float32, [None, num_selected_features], name='features')
         self.y = tf.placeholder(tf.uint8, [None], name='y')  # GT classes
         self.y1h = tf.one_hot(self.y, depth=2, name='y1h')  # GT classes one-hot
 
-        curr_out = self.x
-        curr_dim = Config.INPUT_DIM
+        curr_out = self.features
+        curr_dim = num_selected_features
 
         regularizer = None
         if self.regularization_type == self.REGULARIZATION_L1:
@@ -94,6 +101,7 @@ class Classifier:
             correct_prediction = tf.cast(correct_prediction, tf.float32)
             self.accuracy = tf.reduce_mean(correct_prediction)
 
+        # save the network graph
         if self.save_graph:
             graph_location = tempfile.mkdtemp()
             print('Saving graph to: %s' % graph_location)
@@ -101,6 +109,9 @@ class Classifier:
             train_writer.add_graph(tf.get_default_graph())
 
         self.session.run(tf.global_variables_initializer())
+
+    def get_selected_features(self, features):
+        return np.transpose(np.transpose(features)[np.array(self.features_ids)])
 
     def train(self, data, restart=True, num_steps=1000):
         """
@@ -113,16 +124,23 @@ class Classifier:
         if restart:
             tf.initialize_all_variables()
 
-        test_data = data.get_test(self.training_ratio)
         for step in range(num_steps):
-            batch = data.next_training_batch(self.training_ratio, self.batch_size)
-            self.train_step.run(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
+            batch_features, batch_labels = data.next_training_batch(self.training_ratio, self.batch_size)
+            self.train_step.run(feed_dict={self.features: self.get_selected_features(batch_features),
+                                           self.y: batch_labels}, session=self.session)
 
-        train_loss = self.loss.eval(feed_dict={self.x: batch[0], self.y: batch[1]}, session=self.session)
-        test_loss = self.loss.eval(feed_dict={self.x: test_data[0], self.y: test_data[1]}, session=self.session)
-        #print('step %d, training loss: %g, test loss: %g' % (step, train_loss, test_loss))
+        # compute test loss
+        train_features, train_labels = data.get_training(self.training_ratio)
+        train_loss = self.loss.eval(feed_dict={self.features: self.get_selected_features(train_features),
+                                               self.y: train_labels}, session=self.session)
+
+        # compute training loss
+        test_features, test_labels = data.get_test(self.training_ratio)
+        test_loss = self.loss.eval(feed_dict={self.features: self.get_selected_features(test_features),
+                                              self.y: test_labels}, session=self.session)
+        print('step %d, training loss: %g, test loss: %g' % (step, train_loss, test_loss))
         return train_loss, test_loss
 
-    def predict_y(self, x):
-        yp = self.yp.eval(feed_dict={self.x: x}, session=self.session)
+    def predict_labels(self, features):
+        yp = self.yp.eval(feed_dict={self.features: self.get_selected_features(features)}, session=self.session)
         return np.argmax(yp, axis=1)

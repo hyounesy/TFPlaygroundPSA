@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+# sys.path.append('/Users/hyounesy/Research/cass2017_vis/src')
 
 from __future__ import absolute_import
 from __future__ import division
@@ -23,8 +24,10 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 from dataset import DataSet
 from nn import Classifier
+from config import Config
 import random
 import os
+import shutil
 
 class Run:
     """
@@ -35,13 +38,12 @@ class Run:
     range_training_ratio = [0.1, 0.9]
     range_batch_size = [1, 30]
     learning_rates = [0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
-    regularization_rates = [0.0, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
+    regularization_rates = [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
     range_hidden = [0, 6]
     range_hidden_neuron = [1, 8]
 
     MODE_FULL = 'full'  # a single directory, with randomized data for each run
     MODE_PSA_RUNS = 'psa_runs'  # a few randomized data, in separate directories
-
 
     def __init__(self):
         # dataset parameters
@@ -62,7 +64,7 @@ class Run:
 
     def randomize_data(self, dataset_name=None, noise=None):
         # dataset parameters
-        dataset_name = random.choice(DataSet.data_names) if dataset_name is None else dataset_name
+        dataset_name = random.choice(DataSet.all_data_names) if dataset_name is None else dataset_name
         noise = random.uniform(*self.range_noise) if noise is None else noise
         self.data = DataSet(dataset_name, self.num_samples, noise)
 
@@ -77,10 +79,15 @@ class Run:
         self.classifier.activation_h = random.choice(Classifier.activations_names)
         self.classifier.regularization_type = random.choice(Classifier.regularization_names)
         self.classifier.regularization_rate = random.choice(self.regularization_rates)
+        feature_ids = [i for i in range(DataSet.NUM_FEATURES)]
+        random.shuffle(feature_ids)
+        feature_ids = feature_ids[0: random.randint(1, len(feature_ids))]
+        feature_ids.sort()
+        self.classifier.features_ids = feature_ids
         self.classifier.build()
 
     def param_str(self):
-        return "\t".join([self.data.dataset_name,
+        return '\t'.join([self.data.dataset_name,
                           '{:0.2f}'.format(self.data.noise),
                           str(self.classifier.batch_size),
                           str(self.classifier.learning_rate),
@@ -92,7 +99,7 @@ class Run:
                           ])
 
     def param_names(self):
-        return ['dataset','noise', 'batch_size', 'learning_rate', 'hidden_layers', 'neurons', 'activation', 'regularization', 'regularization_rate']
+        return ['dataset', 'noise', 'batch_size', 'learning_rate', 'hidden_layers', 'neurons', 'activation', 'regularization', 'regularization_rate']
 
     def save_plot(self, filename):
         """
@@ -103,11 +110,15 @@ class Run:
         # matplotlib.interactive(False)
         # plot the resulting classifier
         colormap = colors.ListedColormap(["#f59322", "#e8eaeb", "#0877bd"])
-        x_min, x_max = -6, 6  # data.points[:, 0].min() - 1, data.points[:, 0].max() + 1
-        y_min, y_max = -6, 6  # data.points[:, 1].min() - 1, data.points[:, 1].max() + 1
+        x_min, x_max = -6, 6
+        y_min, y_max = -6, 6
         xx, yy = np.meshgrid(np.linspace(x_min, x_max, 300),
                              np.linspace(y_min, y_max, 300))
-        z = self.classifier.predict_y(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
+
+        data_points = np.c_[xx.ravel(), yy.ravel()]
+        data_grid = DataSet(None, len(data_points), 0, data_points=data_points)
+
+        z = self.classifier.predict_labels(data_grid.features).reshape(xx.shape)
         fig = plt.figure(figsize=(4, 4), dpi=75)
         # plt.imshow(z, cmap=colormap, interpolation='nearest')
         plt.contourf(xx, yy, z, cmap=colormap, alpha=0.8)
@@ -118,8 +129,17 @@ class Run:
         fig.savefig(filename)
         plt.close()
 
+    def save_current_run(self, filename):
+        yp = self.classifier.predict_labels(self.data.features)
+        if Config.SAVE_LABELS_NEG_POS:
+            yp = [-1 if label == 0 else label for label in yp]
+
+
     @staticmethod
-    def create_dir(dirname):
+    def create_dir(dirname, clean=False):
+        if clean:
+            shutil.rmtree(dirname, ignore_errors=True)
+
         if not os.path.exists(dirname):
             os.makedirs(dirname)
 
@@ -140,15 +160,15 @@ class Run:
                 if iter_index == 1:
                     break
                 out_dir = '../output/full'
-                self.create_dir(out_dir)
+                self.create_dir(out_dir, clean=True)
                 curr_data = None
             elif mode == self.MODE_PSA_RUNS:
-                if iter_index >= len(DataSet.data_names):
+                if iter_index >= len(DataSet.all_data_names):
                     break
                 noise = 0.25
-                dataset_name = DataSet.data_names[iter_index]
+                dataset_name = DataSet.all_data_names[iter_index]
                 out_dir = '../output/' + dataset_name + '_25'
-                self.create_dir(out_dir)
+                self.create_dir(out_dir, clean=True)
                 curr_data = DataSet(dataset_name, num_samples=Run.num_samples, noise=noise)
                 curr_data.save_to_file(out_dir + '/input.txt')
             else:
@@ -164,8 +184,8 @@ class Run:
 
             images_dir = out_dir + '/images'
             runs_dir = out_dir + '/runs'
-            self.create_dir(images_dir)
-            self.create_dir(runs_dir)
+            self.create_dir(images_dir, clean=True)
+            self.create_dir(runs_dir, clean=True)
 
             row_index = 0
             for i in range(num_runs):
@@ -191,15 +211,19 @@ class Run:
 
 if __name__ == '__main__':
     run = Run()
-    run.execute_runs(run.MODE_FULL, 10)
+    run.execute_runs(run.MODE_FULL, 5)
 
 
 """
 TODO:
 measure time
 output runs/
-x1, x2, ...
-
+output x1, x2, x1.x2...
+epoch != step?
+show test data
+[ ] descretise output?
+noise mapping: 0-50
+for mode=full, pregenerate several datasets with different noise levels 0, 10, 20, 30, 40, 50
 
 VisRseq TODO:
 imagepath relative to data

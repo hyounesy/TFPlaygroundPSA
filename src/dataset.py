@@ -21,36 +21,72 @@ import numpy as np
 import random
 from config import Config
 
-# https://github.com/tensorflow/playground/blob/master/src/dataset.ts
 class DataSet:
+    """
+    Generate the four training datasets similar to the ones in the playground online demo:
+    https://github.com/tensorflow/playground/blob/master/src/dataset.ts
+    Note that the labels are internally generated as 0, 1 (as opposed to the -1, 1 in the online demo)
+    however can be saved as -1, 1 when Config.SAVE_LABELS_NEG_POS==True
+    """
+
     DATA_CIRCLE = "circle"
     DATA_XOR = "xor"
     DATA_GAUSS = "gauss"
     DATA_SPIRAL = "spiral"
-    data_names = [DATA_CIRCLE, DATA_XOR, DATA_GAUSS, DATA_SPIRAL]
+    all_data_names = [DATA_CIRCLE, DATA_XOR, DATA_GAUSS, DATA_SPIRAL]
 
-    def __init__(self, dataset_name, num_samples, noise):
-        self.points = None   # 2d point coordinates (x1, x2)
-        self.labels = None   # one-hot class labels
+    FEATURE_X1 = 0
+    FEATURE_X2 = 1
+    FEATURE_X1SQ = 2
+    FEATURE_X2SQ = 3
+    FEATURE_X1X2 = 4
+    FEATURE_SIN_X1 = 5
+    FEATURE_SIN_X2 = 6
+    NUM_FEATURES = 7
+    all_features = [i for i in range(NUM_FEATURES)]
+    feature_idx_to_name = ['x1', 'x2', 'x1_sq', 'x2_sq', 'x1x2', 'sin_x1', 'sin_x2']
+    #feature_name_to_idx = {feature_idx_to_name[i]: i for i in range(NUM_FEATURES)}
+
+    def __init__(self, dataset_name, num_samples, noise, data_points=None, data_labels=None):
+        self.points = None
+        self.labels = None  # class labels
+        self.features = None  # post-processed features
         self.batch_index = 0
         self.dataset_name = dataset_name
         self.noise = noise
-        data_gen_func = {
-            self.DATA_CIRCLE: self.data_circle,
-            self.DATA_XOR: self.data_xor,
-            self.DATA_GAUSS: self.data_gauss,
-            self.DATA_SPIRAL: self.data_spiral
-        }
-        data_gen_func[dataset_name](num_samples, noise)
 
-    def data_circle(self, num_samples, noise):
-        self.points = np.zeros([num_samples, 2])
-        self.labels = np.zeros(num_samples).astype(int)
+        if dataset_name is not None:
+            assert (Config.NUM_CLASSES == 2 and Config.POINTS_DIM == 2)  # otherwise these generators won't work
+            data_gen_func = {
+                self.DATA_CIRCLE: self.data_circle,
+                self.DATA_XOR: self.data_xor,
+                self.DATA_GAUSS: self.data_gauss,
+                self.DATA_SPIRAL: self.data_spiral
+            }
+            points, labels = data_gen_func[dataset_name](num_samples, noise)
+            self.points, self.labels = self.shuffle_points(points, labels)
+            self.features = self.create_features(self.points)
+        elif data_points is not None:
+            self.points = data_points
+            self.features = self.create_features(self.points)
+            self.labels = data_labels
+
+    @staticmethod
+    def data_circle(num_samples, noise):
+        """
+        Generates the two circles dataset with the given number of samples and noise
+        :param num_samples: total number of samples
+        :param noise: noise percentage (0 .. 50)
+        :return: None
+        """
         radius = 5
 
         def get_circle_label(x, y, xc, yc):
             return 1 if np.sqrt((x - xc)**2 + (y - yc)**2) < (radius * 0.5) else 0
 
+        noise *= 0.01
+        points = np.zeros([num_samples, 2])
+        labels = np.zeros(num_samples).astype(int)
         # Generate positive points inside the circle.
         for i in range(num_samples // 2):
             r = random.uniform(0, radius * 0.5)
@@ -59,10 +95,8 @@ class DataSet:
             y = r * np.cos(angle)
             noise_x = random.uniform(-radius, radius) * noise
             noise_y = random.uniform(-radius, radius) * noise
-            self.labels[i] = get_circle_label(x + noise_x, y + noise_y, 0, 0)
-            self.points[i] = (x, y)
-
-
+            labels[i] = get_circle_label(x + noise_x, y + noise_y, 0, 0)
+            points[i] = (x, y)
         # Generate negative points outside the circle.
         for i in range(num_samples // 2, num_samples):
             r = random.uniform(radius * 0.7, radius)
@@ -71,16 +105,24 @@ class DataSet:
             y = r * np.cos(angle)
             noise_x = random.uniform(-radius, radius) * noise
             noise_y = random.uniform(-radius, radius) * noise
-            self.labels[i] = get_circle_label(x + noise_x, y + noise_y, 0, 0)
-            self.points[i] = (x, y)
+            labels[i] = get_circle_label(x + noise_x, y + noise_y, 0, 0)
+            points[i] = (x, y)
+        return points, labels
 
-        self.shuffle_data()
-
-    def data_xor(self, num_samples, noise):
+    @staticmethod
+    def data_xor(num_samples, noise):
+        """
+        Generates the xor (checker) dataset with the given number of samples and noise
+        :param num_samples: total number of samples
+        :param noise: noise percentage (0 .. 50)
+        :return: None
+        """
         def get_xor_label(px, py):
             return 1 if px * py >= 0 else 0
-        self.points = np.zeros([num_samples, 2])
-        self.labels = np.zeros(num_samples).astype(int)
+
+        noise *= 0.01
+        points = np.zeros([num_samples, 2])
+        labels = np.zeros(num_samples).astype(int)
         for i in range(num_samples):
             x = random.uniform(-5, 5)
             padding = 0.3
@@ -89,33 +131,42 @@ class DataSet:
             y += padding if y > 0 else -padding
             noise_x = random.uniform(-5, 5) * noise
             noise_y = random.uniform(-5, 5) * noise
-            self.labels[i] = get_xor_label(x + noise_x, y + noise_y)
-            self.points[i] = (x, y)
-        self.shuffle_data()
+            labels[i] = get_xor_label(x + noise_x, y + noise_y)
+            points[i] = (x, y)
+        return points, labels
 
-    def data_gauss(self, num_samples, noise):
+    @staticmethod
+    def data_gauss(num_samples, noise):
         """
-        two Gaussian
-        :param num_samples:
-        :param noise:
-        :return:
+        Generates the two gaussian dataset with the given number of samples and noise
+        :param num_samples: total number of samples
+        :param noise: noise percentage (0 .. 50)
+        :return: None
         """
         def value_scale(value, domain_min, domain_max, range_min, range_max):
             return range_min + (value - domain_min) * (range_max - range_min) / (domain_max - domain_min)
 
+        noise *= 0.01
         variance = value_scale(noise, 0, 0.5, 0.5, 4)
-        assert (Config.NUM_CLASSES == 2 and Config.INPUT_DIM == 2)  # otherwise this data dimensionality is incorrect
-        data_pos = (np.random.multivariate_normal((2, 2), np.identity(Config.INPUT_DIM) * variance, (num_samples // 2)))
-        data_neg = (np.random.multivariate_normal((-2, -2), np.identity(Config.INPUT_DIM) * variance, (num_samples // 2)))
-        self.points = np.concatenate((data_pos, data_neg))
+        data_pos = (np.random.multivariate_normal((-2, -2), np.identity(Config.POINTS_DIM) * variance, (num_samples // 2)))
+        data_neg = (np.random.multivariate_normal((2, 2), np.identity(Config.POINTS_DIM) * variance, (num_samples // 2)))
+        points = np.concatenate((data_pos, data_neg))
         # create a one hot array of labels
-        self.labels = np.array([np.zeros(len(data_pos)), np.ones(len(data_neg))]).ravel().astype(int)
-        self.shuffle_data()
+        labels = np.array([np.zeros(len(data_pos)), np.ones(len(data_neg))]).ravel().astype(int)
+        return points, labels
 
-    def data_spiral(self, num_samples, noise):
+    @staticmethod
+    def data_spiral(num_samples, noise):
+        """
+        Generates the spiral dataset with the given number of samples and noise
+        :param num_samples: total number of samples
+        :param noise: noise percentage (0 .. 50)
+        :return: None
+        """
+        noise *= 0.01
         half = num_samples // 2
-        self.points = np.zeros([num_samples, 2])
-        self.labels = np.zeros(num_samples).astype(int)
+        points = np.zeros([num_samples, 2])
+        labels = np.zeros(num_samples).astype(int)
         for j in range(num_samples):
             i = j % half
             label = 1
@@ -127,23 +178,56 @@ class DataSet:
             t = 1.75 * i / half * 2 * np.pi + delta
             x = r * np.sin(t) + random.uniform(-1, 1) * noise
             y = r * np.cos(t) + random.uniform(-1, 1) * noise
-            self.labels[j] = label
-            self.points[j] = (x, y)
-        self.shuffle_data()
+            labels[j] = label
+            points[j] = (x, y)
+        return points, labels
 
-    def shuffle_data(self):
-        zipped = list(zip(self.points, self.labels))
+    @staticmethod
+    def shuffle_points(points, labels):
+        """
+        shuffle two lists of points and labels, while keeping them matched
+        :param points: list of points
+        :param labels: list of labels
+        :return: shuffled_points, shuffled_labels
+        """
+        # shuffle the points
+        zipped = list(zip(points, labels))
         random.shuffle(zipped)
-        self.points, self.labels = zip(*zipped)
-        self.points = np.array(self.points)
-        self.labels = np.array(self.labels).astype(int)
-        # print(self.points)
+        shuffled_points, shuffled_labels = zip(*zipped)
+        return np.array(shuffled_points), np.array(shuffled_labels).astype(int)
+        
+    @staticmethod
+    def create_features(points):
+        # create the features
+        x1, x2 = np.transpose(points)
+        features = [None] * DataSet.NUM_FEATURES
+        features[DataSet.FEATURE_X1] = x1
+        features[DataSet.FEATURE_X2] = x2
+        features[DataSet.FEATURE_X1SQ] = x1**2
+        features[DataSet.FEATURE_X2SQ] = x2**2
+        features[DataSet.FEATURE_X1X2] = x1*x2
+        features[DataSet.FEATURE_SIN_X1] = np.sin(x1)
+        features[DataSet.FEATURE_SIN_X2] = np.sin(x2)
+        return np.transpose(features)
+
+    def post_process(self):
+        """
+        Postprocess data: Randomly shuffles the data (points and labels together) and create all features
+        :return: none
+        """
+        self.shuffle_points()
+        self.create_features()
+        # print(points)
         # print(self.labels)
         # sys.stdout.flush()
 
     def num_samples(self):
-        if self.points is not None:
-            return len(self.points)
+        """
+        Returns total number of samples
+        :return: total number of samples (training+test)
+        """
+        if self.features is not None:
+            return len(self.features)
         return 0
 
     def next_training_batch(self, training_ratio, mini_batch_size):
@@ -153,25 +237,71 @@ class DataSet:
         :return:
         """
         num_training = int(self.num_samples() * training_ratio)
-        assert(len(self.points) == len(self.labels))
-        points = [self.points[i % num_training] for i in range(self.batch_index,
-                                                               self.batch_index + mini_batch_size)]
+        assert(len(self.features) == len(self.labels))
+        features = [self.features[i % num_training] for i in range(self.batch_index,
+                                                                   self.batch_index + mini_batch_size)]
         labels = [self.labels[i % num_training] for i in range(self.batch_index,
                                                                self.batch_index + mini_batch_size)]
         self.batch_index += mini_batch_size
-        return np.array(points), np.array(labels).astype(int)
+        return np.array(features), np.array(labels).astype(int)
+
+    def get_training(self, training_ratio):
+        """
+        Returns the training portion of the data based on training_ratio
+        :param training_ratio:
+        :return: points[], labels[]
+        """
+        num_training = int(self.num_samples() * training_ratio)
+        return self.features[:num_training], self.labels[:num_training]
 
     def get_test(self, training_ratio):
+        """
+        Returns the test portion of the data based on training_ratio
+        :param training_ratio:
+        :return: points[], labels[]
+        """
         num_training = int(self.num_samples() * training_ratio)
-        return self.points[num_training:], self.labels[num_training:]
+        return self.features[num_training:], self.labels[num_training:]
 
-    def save_to_file(self, filename):
+    def save_to_file(self, filename, features=all_features, more_columns_header=None, more_columns_rows=None):
+        """
+        Saves the data table to the file.
+        :param filename: output filename
+        :param more_columns_header: additional column names to be added to the file. list of string column names.
+        :param more_columns_rows: additional columns to be save to the file. should be a list of strings, one per row.
+        :return: None
+        """
         with open(filename, 'w') as f:
-            f.write('\t'.join(['x1', 'x2', 'label']) + '\n')
+            column_names = ['pid']
+            for ft in features:
+                column_names.append(self.feature_idx_to_name[ft])
+            column_names.append('label')
+            header_str = '\t'.join(column_names)
+            if more_columns_header is not None:
+                header_str += '\t' + more_columns_header
+            f.write(header_str + '\n')
+
+            if more_columns_rows is not None:
+                assert len(more_columns_rows) == self.num_samples()
+
             for i in range(self.num_samples()):
-                f.write('\t'.join([str(self.points[i][0]), str(self.points[i][1]), str(self.labels[i])])+ '\n')
+                label = self.labels[i]
+                if Config.SAVE_LABELS_NEG_POS and label == 0:
+                    label = -1
+                row_str = [str(i)]
+                for ft in features:
+                    row_str.append(str(self.features[i][ft]))
+                row_str.append(str(label))
+                row_str = '\t'.join(row_str)
+                if more_columns_rows is not None:
+                    row_str += '\t' + more_columns_rows[i]
+                f.write(row_str + '\n')
 
 
+if __name__ == '__main__':
+    for dataset_name in DataSet.all_data_names:
+        data = DataSet(dataset_name, 200, 25)
+        data.save_to_file(dataset_name+'.txt')
 
 
 
