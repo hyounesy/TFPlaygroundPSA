@@ -21,6 +21,7 @@ import numpy as np
 import random
 from config import Config
 
+
 class DataSet:
     """
     Generate the four training datasets similar to the ones in the playground online demo:
@@ -151,7 +152,7 @@ class DataSet:
         data_pos = (np.random.multivariate_normal((-2, -2), np.identity(Config.POINTS_DIM) * variance, (num_samples // 2)))
         data_neg = (np.random.multivariate_normal((2, 2), np.identity(Config.POINTS_DIM) * variance, (num_samples // 2)))
         points = np.concatenate((data_pos, data_neg))
-        # create a one hot array of labels
+        # create the array of labels
         labels = np.array([np.zeros(len(data_pos)), np.ones(len(data_neg))]).ravel().astype(int)
         return points, labels
 
@@ -190,15 +191,21 @@ class DataSet:
         :param labels: list of labels
         :return: shuffled_points, shuffled_labels
         """
-        # shuffle the points
         zipped = list(zip(points, labels))
         random.shuffle(zipped)
         shuffled_points, shuffled_labels = zip(*zipped)
+        # print(shuffled_points)
+        # print(shuffled_labels)
+        # sys.stdout.flush()
         return np.array(shuffled_points), np.array(shuffled_labels).astype(int)
         
     @staticmethod
     def create_features(points):
-        # create the features
+        """
+        Create the features from the points
+        :param points: points as an array of [(x1, x2), ...] to create features from
+        :return: np.array of features" [(x1, x2, ...), ...]
+        """
         x1, x2 = np.transpose(points)
         features = [None] * DataSet.NUM_FEATURES
         features[DataSet.FEATURE_X1] = x1
@@ -209,17 +216,6 @@ class DataSet:
         features[DataSet.FEATURE_SIN_X1] = np.sin(x1)
         features[DataSet.FEATURE_SIN_X2] = np.sin(x2)
         return np.transpose(features)
-
-    def post_process(self):
-        """
-        Postprocess data: Randomly shuffles the data (points and labels together) and create all features
-        :return: none
-        """
-        self.shuffle_points()
-        self.create_features()
-        # print(points)
-        # print(self.labels)
-        # sys.stdout.flush()
 
     def num_samples(self):
         """
@@ -233,10 +229,11 @@ class DataSet:
     def next_training_batch(self, training_ratio, mini_batch_size):
         """
         returns next training batch
+        :param training_ratio: ratio of training to test data. integer between 10 to 90
         :param mini_batch_size:
         :return:
         """
-        num_training = int(self.num_samples() * training_ratio)
+        num_training = int(self.num_samples() * training_ratio * 0.01)
         assert(len(self.features) == len(self.labels))
         features = [self.features[i % num_training] for i in range(self.batch_index,
                                                                    self.batch_index + mini_batch_size)]
@@ -248,25 +245,26 @@ class DataSet:
     def get_training(self, training_ratio):
         """
         Returns the training portion of the data based on training_ratio
-        :param training_ratio:
+        :param training_ratio: ratio of training to test data. integer between 10 to 90
         :return: points[], labels[]
         """
-        num_training = int(self.num_samples() * training_ratio)
+        num_training = int(self.num_samples() * training_ratio * 0.01)
         return self.features[:num_training], self.labels[:num_training]
 
     def get_test(self, training_ratio):
         """
         Returns the test portion of the data based on training_ratio
-        :param training_ratio:
+        :param training_ratio: ratio of training to test data. integer between 10 to 90
         :return: points[], labels[]
         """
-        num_training = int(self.num_samples() * training_ratio)
+        num_training = int(self.num_samples() * training_ratio * 0.01)
         return self.features[num_training:], self.labels[num_training:]
 
     def save_to_file(self, filename, features=all_features, more_columns_header=None, more_columns_rows=None):
         """
         Saves the data table to the file.
         :param filename: output filename
+        :param features: features to include in the output
         :param more_columns_header: additional column names to be added to the file. list of string column names.
         :param more_columns_rows: additional columns to be save to the file. should be a list of strings, one per row.
         :return: None

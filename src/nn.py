@@ -23,6 +23,7 @@ import tempfile
 from dataset import DataSet
 from config import Config
 
+
 class Classifier:
     ACTIVATION_RELU = 'ReLU'
     ACTIVATION_TANH = 'Tanh'
@@ -43,10 +44,11 @@ class Classifier:
             self.ACTIVATION_SIGMOID: tf.nn.sigmoid,
             self.ACTIVATION_LINEAR: lambda x: x,
         }
-        self.training_ratio = 0.5  # ratio of training to test
+        self.training_ratio = 50  # ratio (percentage) of training to test [10, 20, ..., 90]
         self.learning_rate = 0.3
-        self.num_hidden = 1  # number of hidden layers
-        self.num_hidden_neuron = 4  # number of neurons in each hidden layer
+        # self.num_hidden = 1  # number of hidden layers
+        # self.num_hidden_neuron = 4  # number of neurons in each hidden layer
+        self.neurons_per_layer = [2, 2]  # number of neurons per hidden layer
         self.activation_h = self.ACTIVATION_TANH  # activation function for hidden layers
         self.regularization_type = self.REGULARIZATION_L1
         self.regularization_rate = 0.1
@@ -75,10 +77,12 @@ class Classifier:
             regularizer = tf.contrib.layers.l2_regularizer(self.regularization_rate)
 
         with tf.variable_scope('layers', regularizer=regularizer):
-            for ih in range(self.num_hidden):
-                w_h = tf.Variable(tf.random_normal([curr_dim, self.num_hidden_neuron]), name='wh_'+str(ih))
-                w_b = tf.Variable(tf.zeros([self.num_hidden_neuron]), name='bh_'+str(ih))
-                curr_dim = self.num_hidden_neuron
+            num_hidden = len(self.neurons_per_layer)
+            for ih in range(num_hidden):
+                next_dim = self.neurons_per_layer[ih]
+                w_h = tf.Variable(tf.random_normal([curr_dim, next_dim]), name='wh_'+str(ih))
+                w_b = tf.Variable(tf.zeros([next_dim]), name='bh_'+str(ih))
+                curr_dim = next_dim
                 curr_out = self.activation_func[self.activation_h](tf.matmul(curr_out, w_h) + w_b)
 
             w_out = tf.Variable(tf.random_normal([curr_dim, Config.NUM_CLASSES]), name='w-out')
@@ -113,11 +117,15 @@ class Classifier:
     def get_selected_features(self, features):
         return np.transpose(np.transpose(features)[np.array(self.features_ids)])
 
+    def predict_labels(self, features):
+        yp = self.yp.eval(feed_dict={self.features: self.get_selected_features(features)}, session=self.session)
+        return np.argmax(yp, axis=1)
+
     def train(self, data, restart=True, num_steps=1000):
         """
         Runs the classifier for a certain number of steps
         :param data: the input data (training+test)
-        :param restart: whether to restart the classfier (reinitialize weights)
+        :param restart: whether to restart the classifier (reinitialize weights)
         :param num_steps: number of steps to run the classifier
         :return: train_loss, test_loss
         """
@@ -128,19 +136,12 @@ class Classifier:
             batch_features, batch_labels = data.next_training_batch(self.training_ratio, self.batch_size)
             self.train_step.run(feed_dict={self.features: self.get_selected_features(batch_features),
                                            self.y: batch_labels}, session=self.session)
-
         # compute test loss
         train_features, train_labels = data.get_training(self.training_ratio)
         train_loss = self.loss.eval(feed_dict={self.features: self.get_selected_features(train_features),
                                                self.y: train_labels}, session=self.session)
-
         # compute training loss
         test_features, test_labels = data.get_test(self.training_ratio)
         test_loss = self.loss.eval(feed_dict={self.features: self.get_selected_features(test_features),
                                               self.y: test_labels}, session=self.session)
-        print('step %d, training loss: %g, test loss: %g' % (step, train_loss, test_loss))
         return train_loss, test_loss
-
-    def predict_labels(self, features):
-        yp = self.yp.eval(feed_dict={self.features: self.get_selected_features(features)}, session=self.session)
-        return np.argmax(yp, axis=1)
