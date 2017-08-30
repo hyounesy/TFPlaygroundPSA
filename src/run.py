@@ -93,7 +93,7 @@ class Run:
 
     def param_str(self):
         row_str = [self.data.dataset_name,
-                   '{:0.2f}'.format(self.data.noise),
+                   str(self.data.noise),
                    str(self.classifier.batch_size)] + \
                   ['1' if i in self.classifier.features_ids else '0' for i in DataSet.all_features] + \
                   [str(self.classifier.learning_rate),
@@ -136,6 +136,11 @@ class Run:
         yp = self.classifier.predict_labels(self.data.features)
         if Config.SAVE_LABELS_NEG_POS:
             yp = [-1 if label == 0 else label for label in yp]
+        header = 'label_pred'
+        with open(filename, 'w') as f:
+            f.write(header + '\n')
+            for v in yp:
+                f.write(str(v) + '\n')
 
 
     @staticmethod
@@ -202,12 +207,14 @@ class Run:
                 for step in [100, 500, 1000, 2000, 4000]:
                     test_loss, train_loss = self.classifier.train(self.data, restart=False, num_steps=step - prev_step)
                     image_filename = images_dir + '/' + str(row_index) + ".png"
+                    run_filename = runs_dir + '/' + str(row_index) + ".txt"
                     f_runs.write('\t'.join([str(row_index), image_filename]) + '\t' +
                                  self.param_str() + '\t' +
                                  '\t'.join([str(step), str(train_loss), str(test_loss)]) +
                                  '\n')
                     row_index += 1
                     self.save_plot(image_filename)
+                    self.save_current_run(run_filename)
                     prev_step = step
                 print(self.param_str())
 
