@@ -262,7 +262,7 @@ class Run:
                   ['imagePath', 'Image path', self.PARAM_TYPE_OUTPUT, 'Output image path']] +
                  self.param_info() +
                  [['epoch', 'Epoch', self.PARAM_TYPE_INT, 'Number of Epochs (of processing all training data)'],
-                  ['iteration', 'Iterations', self.PARAM_TYPE_INT, 'Number of Iterations (of processing a batch)']
+                  ['iteration', 'Iterations', self.PARAM_TYPE_INT, 'Number of Iterations (of processing a batch)'],
                   ['total_time', 'Total time (ms)', self.PARAM_TYPE_OUTPUT, 'Total time at this epoch'],
                   ['mean_time', 'Mean time (ms)', self.PARAM_TYPE_OUTPUT, 'Mean time per epoch'],
                   ['train_loss', 'Training loss', self.PARAM_TYPE_OUTPUT, 'Training loss at epoch'],
@@ -349,7 +349,7 @@ class Run:
 
 if __name__ == '__main__':
     run = Run()
-    run.execute_runs(run.MODE_PSA_RUNS, 400)
+    run.execute_runs(run.MODE_PSA_RUNS, 2)
 
 
 """
