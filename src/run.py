@@ -181,6 +181,7 @@ class Run:
     def calc_stats(self):
         yp = self.nn.predict_labels(self.data.features)
         y = self.data.labels
+        list(a == b).count(True)
 
 
     @staticmethod
@@ -254,28 +255,29 @@ class Run:
                 print('  '.join(a[0] + ': ' + a[1] for a in zip(self.param_names(), self.param_str())))
 
                 prev_step = 0
-                for step in [100, 500, 1000, 2000, 4000]:
-                    test_loss, train_loss = self.nn.train(self.data, restart=False, num_steps=step - prev_step)
-                    print('step %d, training loss: %g, test loss: %g' % (step, train_loss, test_loss))
+                for epoch in [100, 200, 400, 800, 1600]:
+                    curr_step = int(epoch * self.data.num_samples() / self.nn.batch_size)
+                    test_loss, train_loss = self.nn.train(self.data, restart=False, num_steps=curr_step - prev_step)
+                    print('epoch %d (step %d), training loss: %g, test loss: %g' % (epoch, curr_step, train_loss, test_loss))
                     image_filename = images_dir + '/' + str(row_index) + ".png"
                     run_filename = runs_dir + '/' + str(row_index) + ".txt"
                     f_runs.write('\t'.join(
                         [str(row_index),
                          image_filename] +
                         self.param_str() +
-                        [str(step),
+                        [str(epoch),
                          str(train_loss),
                          str(test_loss)]) +
                                  '\n')
                     row_index += 1
                     self.save_plot(image_filename)
                     self.save_current_run(run_filename)
-                    prev_step = step
+                    prev_step = curr_step
 
 
 if __name__ == '__main__':
     run = Run()
-    run.execute_runs(run.MODE_PSA_RUNS, 10)
+    run.execute_runs(run.MODE_PSA_RUNS, 100)
 
 
 """
