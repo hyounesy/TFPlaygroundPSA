@@ -82,24 +82,37 @@ class Run:
         self.nn.features_ids = feature_ids
         self.nn.build()
 
+    PARAM_TYPE_INT = 'int'
+    PARAM_TYPE_DOUBLE = 'double'
+    PARAM_TYPE_STR = 'string'
+    PARAM_TYPE_OUTPUT = 'output'
+
+    @staticmethod
+    def param_info_header():
+        return ['label', 'name', 'type', 'info']
+
+    def param_info(self):
+        max_hidden = self.range_hidden[1]
+        return ([['data', 'Data', self.PARAM_TYPE_STR, 'Which dataset do you want to use?'],
+                 ['training_ratio', 'Training Ratio', self.PARAM_TYPE_INT, 'Ratio of training to test data'],
+                 ['noise', 'Noise', self.PARAM_TYPE_INT, 'Noise'],
+                 ['batch_size', 'Batch Size', self.PARAM_TYPE_INT, 'Batch Size']] +
+                [[f, f, self.PARAM_TYPE_INT, f] for f in DataSet.feature_idx_to_name] +
+                [['layer_count', 'Layers Count', self.PARAM_TYPE_INT, 'Number of hidden layers'],
+                 ['neuron_count', 'Neurons Count', self.PARAM_TYPE_INT, 'Total number of neurons in all hidden layers']] +
+                [['H'+str(i), 'H'+str(i), self.PARAM_TYPE_INT, 'H'+str(i)] for i in range(1, max_hidden + 1)] +
+                [['learning_rate', 'Learning rate', self.PARAM_TYPE_DOUBLE, 'Learning rate'],
+                 ['activation', 'Activation', self.PARAM_TYPE_STR, 'Activation'],
+                 ['regularization', 'Regularization', self.PARAM_TYPE_STR, 'Regularization'],
+                 ['regularization_rate', 'Regularization rate', self.PARAM_TYPE_DOUBLE, 'Regularization rate']])
+
     def param_names(self):
         """
         returns array of string names for the parameters. matching 1-to-1 with param_str
         :return:
         """
-        max_hidden = self.range_hidden[1]
-        return (['dataset',
-                 'training_ratio',
-                 'noise',
-                 'batch_size'] +
-                DataSet.feature_idx_to_name +
-                ['layer_count',
-                 'neuron_count'] +
-                ['H'+str(i) for i in range(max_hidden)] +
-                ['learning_rate',
-                 'activation',
-                 'regularization',
-                 'regularization_rate'])
+        info = self.param_info()
+        return [info[i][0] for i in range(len(info))]
 
     def param_str(self):
         """
@@ -165,6 +178,11 @@ class Run:
             for v in yp:
                 f.write(str(v) + '\n')
 
+    def calc_stats(self):
+        yp = self.nn.predict_labels(self.data.features)
+        y = self.data.labels
+
+
     @staticmethod
     def create_dir(dirname, clean=False):
         if clean:
@@ -206,12 +224,21 @@ class Run:
                 return
 
             # create write the header for the runs.txt file
-            f_runs = open(out_dir + '/runs.txt', 'w')
-            f_runs.write('\t'.join(['ID', 'imagePath']) + '\t' +
-                         '\t'.join(self.param_names()) + '\t' +
-                         '\t'.join(['step', 'train_loss', 'test_loss']) +
-                         '\n')
+            f_runs = open(out_dir + '/index.txt', 'w')
+            all_param_info = ([['ID', 'ID', self.PARAM_TYPE_OUTPUT, 'ID'],
+                               ['imagePath', 'Image path', self.PARAM_TYPE_OUTPUT, 'Output image path']] +
+                              self.param_info() +
+                              [['epoch', 'Epoch', self.PARAM_TYPE_INT, 'Epoch'],
+                               ['train_loss', 'Training loss', self.PARAM_TYPE_OUTPUT, 'Training loss at step'],
+                               ['test_loss', 'Test loss', self.PARAM_TYPE_OUTPUT, 'Test loss at step']])
 
+            # save the paramInfo.txt
+            with open(out_dir + '/paramInfo.txt', 'w') as fpi:
+                fpi.write('\t'.join(self.param_info_header()) + '\n')
+                fpi.write('\n'.join(['\t'.join(i) for i in all_param_info]))
+
+            # write the header for the runs.txt
+            f_runs.write('\t'.join([i[0] for i in all_param_info]) + '\n')
             images_dir = out_dir + '/images'
             runs_dir = out_dir + '/runs'
             self.create_dir(images_dir, clean=True)
@@ -232,9 +259,13 @@ class Run:
                     print('step %d, training loss: %g, test loss: %g' % (step, train_loss, test_loss))
                     image_filename = images_dir + '/' + str(row_index) + ".png"
                     run_filename = runs_dir + '/' + str(row_index) + ".txt"
-                    f_runs.write('\t'.join([str(row_index), image_filename]) + '\t' +
-                                 '\t'.join(self.param_str()) + '\t' +
-                                 '\t'.join([str(step), str(train_loss), str(test_loss)]) +
+                    f_runs.write('\t'.join(
+                        [str(row_index),
+                         image_filename] +
+                        self.param_str() +
+                        [str(step),
+                         str(train_loss),
+                         str(test_loss)]) +
                                  '\n')
                     row_index += 1
                     self.save_plot(image_filename)
@@ -244,10 +275,14 @@ class Run:
 
 if __name__ == '__main__':
     run = Run()
-    run.execute_runs(run.MODE_PSA_RUNS, 100)
+    run.execute_runs(run.MODE_PSA_RUNS, 10)
 
 
 """
+make two datasets: one flattened
+remove the "image" column
+
+time: mean and total
 TODO:
 Ratio of training to test data?
 measure time
@@ -255,8 +290,9 @@ epoch != step?
 for mode=full, pregenerate several datasets with different noise levels 0, 10, 20, 30, 40, 50
 
 VisRseq TODO:
-imagepath relative to data
 index.txt -> runs.txt
-
-
+checkbox to enable/disable sorting by impact?
+keep the aspect ratio of the image
+mds is good. sum up/down bad. how to get rid of it?
+adds quotes, without them won't work
 """

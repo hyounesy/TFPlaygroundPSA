@@ -46,8 +46,6 @@ class Classifier:
         }
         self.training_ratio = 50  # ratio (percentage) of training to test [10, 20, ..., 90]
         self.learning_rate = 0.3
-        # self.num_hidden = 1  # number of hidden layers
-        # self.num_hidden_neuron = 4  # number of neurons in each hidden layer
         self.neurons_per_layer = [2, 2]  # number of neurons per hidden layer
         self.activation_h = self.ACTIVATION_TANH  # activation function for hidden layers
         self.regularization_type = self.REGULARIZATION_L1
@@ -59,6 +57,8 @@ class Classifier:
     def build(self):
         num_selected_features = len(self.features_ids)
 
+        # could not figure out how to use the boolean_mask.
+        # So for now, the input should only include the selected features
         # mask = [i in self.selected_features_ids for i in range(DataSet.NUM_FEATURES)]
         # self.all_features = tf.placeholder(tf.float32, [None, DataSet.NUM_FEATURES], name='all_features')
         # self.features = tf.boolean_mask(self.features, mask, name='selected_features')
