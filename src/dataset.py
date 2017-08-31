@@ -45,7 +45,7 @@ class DataSet:
     FEATURE_SIN_X2 = 6
     NUM_FEATURES = 7
     all_features = [i for i in range(NUM_FEATURES)]
-    feature_idx_to_name = ['x1', 'x2', 'x1_sq', 'x2_sq', 'x1x2', 'sin_x1', 'sin_x2']
+    feature_idx_to_name = ['X1', 'X2', 'X1Squared', 'X2Squared', 'X1X2', 'sinX1', 'sinX2']
     #feature_name_to_idx = {feature_idx_to_name[i]: i for i in range(NUM_FEATURES)}
 
     def __init__(self, dataset_name, num_samples, noise, data_points=None, data_labels=None):
@@ -226,14 +226,22 @@ class DataSet:
             return len(self.features)
         return 0
 
-    def next_training_batch(self, training_ratio, mini_batch_size):
+    def num_training(self, perc_train):
+        """
+        Returns the number of training data
+        :param perc_train: percentage of the training data
+        :return:
+        """
+        return int(self.num_samples() * perc_train / 100)
+
+    def next_training_batch(self, perc_train, mini_batch_size):
         """
         returns next training batch
-        :param training_ratio: ratio of training to test data. integer between 10 to 90
+        :param perc_train: percentage of training to test data. integer between 10 to 90
         :param mini_batch_size:
         :return:
         """
-        num_training = int(self.num_samples() * training_ratio * 0.01)
+        num_training = self.num_training(perc_train)
         assert(len(self.features) == len(self.labels))
         features = [self.features[i % num_training] for i in range(self.batch_index,
                                                                    self.batch_index + mini_batch_size)]
@@ -242,22 +250,22 @@ class DataSet:
         self.batch_index += mini_batch_size
         return np.array(features), np.array(labels).astype(int)
 
-    def get_training(self, training_ratio):
+    def get_training(self, perc_train):
         """
-        Returns the training portion of the data based on training_ratio
-        :param training_ratio: ratio of training to test data. integer between 10 to 90
+        Returns the training portion of the data based on perc_train
+        :param perc_train: percentage of training to test data. integer between 10 to 90
         :return: points[], labels[]
         """
-        num_training = int(self.num_samples() * training_ratio * 0.01)
+        num_training = self.num_training(perc_train)
         return self.features[:num_training], self.labels[:num_training]
 
-    def get_test(self, training_ratio):
+    def get_test(self, perc_train):
         """
-        Returns the test portion of the data based on training_ratio
-        :param training_ratio: ratio of training to test data. integer between 10 to 90
+        Returns the test portion of the data based on perc_train
+        :param perc_train: percentage of training to test data. integer between 10 to 90
         :return: points[], labels[]
         """
-        num_training = int(self.num_samples() * training_ratio * 0.01)
+        num_training = self.num_training(perc_train)
         return self.features[num_training:], self.labels[num_training:]
 
     def save_to_file(self, filename, features=all_features, more_columns_header=None, more_columns_rows=None):

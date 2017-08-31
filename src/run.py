@@ -28,6 +28,7 @@ from config import Config
 import random
 import os
 import shutil
+import time
 
 class Run:
     """
@@ -35,7 +36,7 @@ class Run:
     """
     num_samples = 200  # always fixed
     range_noise = list(range(0, 51, 5))
-    training_ratios = list(range(10, 91, 10)) # ratio of training to test
+    perc_train_values = list(range(10, 91, 10)) # percentage of training to test
     range_batch_size = [1, 30]
     learning_rates = [0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
     regularization_rates = [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
@@ -67,7 +68,7 @@ class Run:
         :return: None
         """
         self.nn = Classifier()
-        self.nn.training_ratio = random.choice(self.training_ratios)
+        self.nn.perc_train = random.choice(self.perc_train_values)
         self.nn.batch_size = random.randint(*self.range_batch_size)
         self.nn.learning_rate = random.choice(self.learning_rates)
         self.nn.neurons_per_layer = [random.randint(*self.range_hidden_neuron)
@@ -94,8 +95,8 @@ class Run:
     def param_info(self):
         max_hidden = self.range_hidden[1]
         return ([['data', 'Data', self.PARAM_TYPE_STR, 'Which dataset do you want to use?'],
-                 ['training_ratio', 'Training Ratio', self.PARAM_TYPE_INT, 'Ratio of training to test data'],
                  ['noise', 'Noise', self.PARAM_TYPE_INT, 'Noise'],
+                 ['training_ratio', 'Training Ratio', self.PARAM_TYPE_INT, 'Ratio of training to test data'],
                  ['batch_size', 'Batch Size', self.PARAM_TYPE_INT, 'Batch Size']] +
                 [[f, f, self.PARAM_TYPE_INT, f] for f in DataSet.feature_idx_to_name] +
                 [['layer_count', 'Layers Count', self.PARAM_TYPE_INT, 'Number of hidden layers'],
@@ -122,8 +123,8 @@ class Run:
         layer_count = len(self.nn.neurons_per_layer)
         max_hidden = self.range_hidden[1]
         return ([self.data.dataset_name,
-                 str(self.nn.training_ratio),
                  str(self.data.noise),
+                 str(self.nn.perc_train),
                  str(self.nn.batch_size)] +
                 ['1' if i in self.nn.features_ids else '0' for i in DataSet.all_features] +
                 [str(layer_count),
@@ -155,7 +156,7 @@ class Run:
         fig = plt.figure(figsize=(4, 4), dpi=75)
         # plt.imshow(z, cmap=colormap, interpolation='nearest')
         plt.contourf(xx, yy, z, cmap=colormap, alpha=0.8)
-        num_training = int(len(self.data.points) * self.nn.training_ratio * 0.01)
+        num_training = self.data.num_training(self.nn.perc_train)
         point_color = self.data.labels
         # plot training data points
         plt.scatter(self.data.points[:num_training, 0], self.data.points[:num_training, 1],
@@ -178,11 +179,21 @@ class Run:
             for v in yp:
                 f.write(str(v) + '\n')
 
-    def calc_stats(self):
-        yp = self.nn.predict_labels(self.data.features)
-        y = self.data.labels
-        list(a == b).count(True)
-
+    def calc_tpr_fpr(self):
+        """
+        calculates the true positive rate and false positive rate
+        :return: tpr, fpr
+        """
+        num_training = self.data.num_training(self.nn.perc_train)
+        y_test = self.data.labels[num_training:] # true labels
+        yp_test = self.nn.predict_labels(self.data.features)[num_training:] # predicted labels
+        num_p = list(y_test).count(1)  # number of positive labels
+        num_tp = [y == 1 and yp == 1 for y, yp in zip(y_test, yp_test)].count(True)  # true positives
+        num_n = list(y_test).count(0)  # number of negative labels
+        num_fp = [y == 0 and yp == 1 for y, yp in zip(y_test, yp_test)].count(True)  # false positives
+        tpr = 0 if num_tp == 0 else num_tp/num_p  # true positive rate
+        fpr = 0 if num_fp == 0 else num_fp/num_n  # false positive rate
+        return tpr, fpr
 
     @staticmethod
     def create_dir(dirname, clean=False):
@@ -201,7 +212,6 @@ class Run:
         :param num_runs: number of runs per experiment
         :return:
         """
-
         iter_index = -1
         while True:
             iter_index += 1
@@ -230,8 +240,13 @@ class Run:
                                ['imagePath', 'Image path', self.PARAM_TYPE_OUTPUT, 'Output image path']] +
                               self.param_info() +
                               [['epoch', 'Epoch', self.PARAM_TYPE_INT, 'Epoch'],
+                               ['total_time', 'Total time (ms)', self.PARAM_TYPE_OUTPUT, 'Total time at this epoch'],
+                               ['mean_time', 'Mean time (ms)', self.PARAM_TYPE_OUTPUT, 'Mean time per epoch'],
                                ['train_loss', 'Training loss', self.PARAM_TYPE_OUTPUT, 'Training loss at step'],
-                               ['test_loss', 'Test loss', self.PARAM_TYPE_OUTPUT, 'Test loss at step']])
+                               ['test_loss', 'Test loss', self.PARAM_TYPE_OUTPUT, 'Test loss at step'],
+                               ['TPR', 'True Positive Rate', self.PARAM_TYPE_OUTPUT, 'True Positive Rate'],
+                               ['FPR', 'False Positive Rate', self.PARAM_TYPE_OUTPUT, 'False Positive Rate']
+                               ])
 
             # save the paramInfo.txt
             with open(out_dir + '/paramInfo.txt', 'w') as fpi:
@@ -255,19 +270,37 @@ class Run:
                 print('  '.join(a[0] + ': ' + a[1] for a in zip(self.param_names(), self.param_str())))
 
                 prev_step = 0
+                total_time = 0
                 for epoch in [100, 200, 400, 800, 1600]:
-                    curr_step = int(epoch * self.data.num_samples() / self.nn.batch_size)
+                    # curr_step = int(epoch * self.data.num_samples() / self.nn.batch_size)
+                    curr_step = epoch # in the online demo epoch == iter: https://github.com/tensorflow/playground/blob/67cf64ffe1fc53967d1c979d26d30a4625d18310/src/playground.ts#L898
+
+                    time_start = time.time()
                     test_loss, train_loss = self.nn.train(self.data, restart=False, num_steps=curr_step - prev_step)
-                    print('epoch %d (step %d), training loss: %g, test loss: %g' % (epoch, curr_step, train_loss, test_loss))
+                    total_time += (time.time() - time_start) * 1000.0
+                    mean_time = total_time / epoch
+
+                    tpr, fpr = self.calc_tpr_fpr()
+
+                    print('epoch %d (step %d), total_time: %g, mean_time: %g, '
+                          'training loss: %g, test loss: %g, tpr: %g, fpr: %g' %
+                          (epoch, curr_step, total_time, mean_time,
+                           train_loss, test_loss, tpr, fpr))
+
                     image_filename = images_dir + '/' + str(row_index) + ".png"
                     run_filename = runs_dir + '/' + str(row_index) + ".txt"
+
                     f_runs.write('\t'.join(
                         [str(row_index),
                          image_filename] +
                         self.param_str() +
                         [str(epoch),
+                         str(total_time),
+                         str(mean_time),
                          str(train_loss),
-                         str(test_loss)]) +
+                         str(test_loss),
+                         str(tpr),
+                         str(fpr)]) +
                                  '\n')
                     row_index += 1
                     self.save_plot(image_filename)
@@ -277,18 +310,12 @@ class Run:
 
 if __name__ == '__main__':
     run = Run()
-    run.execute_runs(run.MODE_PSA_RUNS, 100)
+    run.execute_runs(run.MODE_FULL, 40)
 
 
 """
 make two datasets: one flattened
-remove the "image" column
-
-time: mean and total
 TODO:
-Ratio of training to test data?
-measure time
-epoch != step?
 for mode=full, pregenerate several datasets with different noise levels 0, 10, 20, 30, 40, 50
 
 VisRseq TODO:

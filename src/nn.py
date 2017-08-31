@@ -44,7 +44,7 @@ class Classifier:
             self.ACTIVATION_SIGMOID: tf.nn.sigmoid,
             self.ACTIVATION_LINEAR: lambda x: x,
         }
-        self.training_ratio = 50  # ratio (percentage) of training to test [10, 20, ..., 90]
+        self.perc_train = 50  # percentage of training to test [10, 20, ..., 90]
         self.learning_rate = 0.3
         self.neurons_per_layer = [2, 2]  # number of neurons per hidden layer
         self.activation_h = self.ACTIVATION_TANH  # activation function for hidden layers
@@ -133,15 +133,15 @@ class Classifier:
             tf.initialize_all_variables()
 
         for step in range(num_steps):
-            batch_features, batch_labels = data.next_training_batch(self.training_ratio, self.batch_size)
+            batch_features, batch_labels = data.next_training_batch(self.perc_train, self.batch_size)
             self.train_step.run(feed_dict={self.features: self.get_selected_features(batch_features),
                                            self.y: batch_labels}, session=self.session)
         # compute test loss
-        train_features, train_labels = data.get_training(self.training_ratio)
+        train_features, train_labels = data.get_training(self.perc_train)
         train_loss = self.loss.eval(feed_dict={self.features: self.get_selected_features(train_features),
                                                self.y: train_labels}, session=self.session)
         # compute training loss
-        test_features, test_labels = data.get_test(self.training_ratio)
+        test_features, test_labels = data.get_test(self.perc_train)
         test_loss = self.loss.eval(feed_dict={self.features: self.get_selected_features(test_features),
                                               self.y: test_labels}, session=self.session)
         return train_loss, test_loss
