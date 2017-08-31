@@ -43,6 +43,11 @@ class Run:
     range_hidden = [0, 6]
     range_hidden_neuron = [1, 8]
 
+    PARAM_TYPE_INT = 'int'
+    PARAM_TYPE_DOUBLE = 'double'
+    PARAM_TYPE_STR = 'string'
+    PARAM_TYPE_OUTPUT = 'output'
+
     MODE_FULL = 'full'  # a single directory, with randomized data for each run
     MODE_PSA_RUNS = 'psa_runs'  # a few randomized data, in separate directories
 
@@ -82,11 +87,6 @@ class Run:
         feature_ids.sort()
         self.nn.features_ids = feature_ids
         self.nn.build()
-
-    PARAM_TYPE_INT = 'int'
-    PARAM_TYPE_DOUBLE = 'double'
-    PARAM_TYPE_STR = 'string'
-    PARAM_TYPE_OUTPUT = 'output'
 
     @staticmethod
     def param_info_header():
@@ -169,6 +169,20 @@ class Run:
         fig.savefig(filename)
         plt.close()
 
+    @staticmethod
+    def create_dir(dirname, clean=False):
+        """
+        Creates the directory if doesn't exist
+        :param dirname: directory path
+        :param clean: whether to clean the directory
+        :return: None
+        """
+        if clean:
+            shutil.rmtree(dirname, ignore_errors=True)
+
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
     def save_current_run(self, filename):
         yp = self.nn.predict_labels(self.data.features)
         if Config.SAVE_LABELS_NEG_POS:
@@ -182,26 +196,31 @@ class Run:
     def calc_tpr_fpr(self):
         """
         calculates the true positive rate and false positive rate
-        :return: tpr, fpr
+        :return: [train_tpr, train_fpr, test_tpr, test_fpr]
         """
+        labels_pred = self.nn.predict_labels(self.data.features)
         num_training = self.data.num_training(self.nn.perc_train)
-        y_test = self.data.labels[num_training:] # true labels
-        yp_test = self.nn.predict_labels(self.data.features)[num_training:] # predicted labels
-        num_p = list(y_test).count(1)  # number of positive labels
-        num_tp = [y == 1 and yp == 1 for y, yp in zip(y_test, yp_test)].count(True)  # true positives
-        num_n = list(y_test).count(0)  # number of negative labels
-        num_fp = [y == 0 and yp == 1 for y, yp in zip(y_test, yp_test)].count(True)  # false positives
-        tpr = 0 if num_tp == 0 else num_tp/num_p  # true positive rate
-        fpr = 0 if num_fp == 0 else num_fp/num_n  # false positive rate
-        return tpr, fpr
+        stats = []
+        for population in ['train', 'test']:
+            if population == 'train':
+                y = self.data.labels[:num_training]  # true labels for training
+                yp = labels_pred[:num_training]  # predicted labels for training
+            else:  # population == 'test'
+                y = self.data.labels[num_training:]  # true labels for test
+                yp = labels_pred[num_training:]  # predicted labels for test
 
-    @staticmethod
-    def create_dir(dirname, clean=False):
-        if clean:
-            shutil.rmtree(dirname, ignore_errors=True)
-
-        if not os.path.exists(dirname):
-            os.makedirs(dirname)
+            num_p = list(y).count(1)  # number of positive labels
+            num_n = list(y).count(0)  # number of negative labels
+            num_tp = [l == 1 and lp == 1 for l, lp in zip(y, yp)].count(True)  # true positives
+            num_fp = [l == 0 and lp == 1 for l, lp in zip(y, yp)].count(True)  # false positives
+            # num_tn = [l == 0 and lp == 0 for l, lp in zip(y, yp)].count(True)  # true positives
+            # num_fn = [l == 1 and lp == 0 for l, lp in zip(y, yp)].count(True)  # true positives
+            tpr = 0 if num_tp == 0 else num_tp/num_p  # true positive rate
+            fpr = 0 if num_fp == 0 else num_fp/num_n  # false positive rate
+            # tnr = 0 if num_tn == 0 else num_tn/num_n  # true negative rate
+            # fnr = 0 if num_fn == 0 else num_fn/num_p  # false negative rate
+            stats = stats + [tpr, fpr]
+        return stats
 
     def execute_runs(self, mode, num_runs):
         """
@@ -213,6 +232,8 @@ class Run:
         :return:
         """
         iter_index = -1
+        # mode_psa_datasets = DataSet.all_data_names
+        mode_psa_datasets = [DataSet.DATA_SPIRAL] # debug
         while True:
             iter_index += 1
             if mode == self.MODE_FULL:
@@ -222,10 +243,10 @@ class Run:
                 self.create_dir(out_dir, clean=True)
                 curr_data = None
             elif mode == self.MODE_PSA_RUNS:
-                if iter_index >= len(DataSet.all_data_names):
+                if iter_index >= len(mode_psa_datasets):
                     break
                 noise = 25
-                dataset_name = DataSet.all_data_names[iter_index]
+                dataset_name = mode_psa_datasets[iter_index]
                 out_dir = '../output/' + dataset_name + '_' + str(noise)
                 self.create_dir(out_dir, clean=True)
                 curr_data = DataSet(dataset_name, num_samples=Run.num_samples, noise=noise)
@@ -236,17 +257,25 @@ class Run:
 
             # create write the header for the runs.txt file
             f_runs = open(out_dir + '/index.txt', 'w')
-            all_param_info = ([['ID', 'ID', self.PARAM_TYPE_OUTPUT, 'ID'],
-                               ['imagePath', 'Image path', self.PARAM_TYPE_OUTPUT, 'Output image path']] +
-                              self.param_info() +
-                              [['epoch', 'Epoch', self.PARAM_TYPE_INT, 'Epoch'],
-                               ['total_time', 'Total time (ms)', self.PARAM_TYPE_OUTPUT, 'Total time at this epoch'],
-                               ['mean_time', 'Mean time (ms)', self.PARAM_TYPE_OUTPUT, 'Mean time per epoch'],
-                               ['train_loss', 'Training loss', self.PARAM_TYPE_OUTPUT, 'Training loss at step'],
-                               ['test_loss', 'Test loss', self.PARAM_TYPE_OUTPUT, 'Test loss at step'],
-                               ['TPR', 'True Positive Rate', self.PARAM_TYPE_OUTPUT, 'True Positive Rate'],
-                               ['FPR', 'False Positive Rate', self.PARAM_TYPE_OUTPUT, 'False Positive Rate']
-                               ])
+            all_param_info = \
+                ([['ID', 'ID', self.PARAM_TYPE_OUTPUT, 'ID'],
+                  ['imagePath', 'Image path', self.PARAM_TYPE_OUTPUT, 'Output image path']] +
+                 self.param_info() +
+                 [['epoch', 'Epoch', self.PARAM_TYPE_INT, 'Number of Epochs (of processing all training data)'],
+                  ['iteration', 'Iterations', self.PARAM_TYPE_INT, 'Number of Iterations (of processing a batch)']
+                  ['total_time', 'Total time (ms)', self.PARAM_TYPE_OUTPUT, 'Total time at this epoch'],
+                  ['mean_time', 'Mean time (ms)', self.PARAM_TYPE_OUTPUT, 'Mean time per epoch'],
+                  ['train_loss', 'Training loss', self.PARAM_TYPE_OUTPUT, 'Training loss at epoch'],
+                  ['test_loss', 'Test loss', self.PARAM_TYPE_OUTPUT, 'Test loss at epoch'],
+                  ['train_TPR', 'TPR for train', self.PARAM_TYPE_OUTPUT, 'True positive rate for training data'],
+                  ['train_FPR', 'FPR for train', self.PARAM_TYPE_OUTPUT, 'False positive rate for training data'],
+                  # ['train_TNR', 'TNR for train', self.PARAM_TYPE_OUTPUT, 'True negative rate for training data'],
+                  # ['train_FNR', 'FNR for train', self.PARAM_TYPE_OUTPUT, 'False negative Rate for training data'],
+                  ['test_TPR', 'TPR for test', self.PARAM_TYPE_OUTPUT, 'True positive rate for test data'],
+                  ['test_FPR', 'FPR for test', self.PARAM_TYPE_OUTPUT, 'False positive rate for test data'],
+                  # ['test_TNR', 'TNR for test', self.PARAM_TYPE_OUTPUT, 'True negative rate for test data'],
+                  # ['test_FNR', 'FNR for test', self.PARAM_TYPE_OUTPUT, 'False negative Rate for test data'],
+                  ])
 
             # save the paramInfo.txt
             with open(out_dir + '/paramInfo.txt', 'w') as fpi:
@@ -261,46 +290,56 @@ class Run:
             self.create_dir(runs_dir, clean=True)
 
             row_index = 0
-            for i in range(num_runs):
+            for run_index in range(num_runs):
                 if curr_data is None:
                     self.randomize_data()  # randomize the data every time
                 else:
                     self.data = curr_data  # reuse the same data
                 self.randomize_training_params()
-                print('  '.join(a[0] + ': ' + a[1] for a in zip(self.param_names(), self.param_str())))
+                # print the parameters
+                print('(%d of %d)' % (run_index, num_runs))
+                print(', '.join(a[0] + ': ' + a[1] for a in zip(self.param_names(), self.param_str())))
 
                 prev_step = 0
                 total_time = 0
-                for epoch in [100, 200, 400, 800, 1600]:
-                    # curr_step = int(epoch * self.data.num_samples() / self.nn.batch_size)
-                    curr_step = epoch # in the online demo epoch == iter: https://github.com/tensorflow/playground/blob/67cf64ffe1fc53967d1c979d26d30a4625d18310/src/playground.ts#L898
+                for epoch in [25, 50, 100, 200, 400]:
+                    curr_step = int(epoch * self.data.num_samples() / self.nn.batch_size)
+                    # curr_step = epoch # in the online demo epoch == iter: https://github.com/tensorflow/playground/blob/67cf64ffe1fc53967d1c979d26d30a4625d18310/src/playground.ts#L898
 
                     time_start = time.time()
                     test_loss, train_loss = self.nn.train(self.data, restart=False, num_steps=curr_step - prev_step)
                     total_time += (time.time() - time_start) * 1000.0
                     mean_time = total_time / epoch
 
-                    tpr, fpr = self.calc_tpr_fpr()
+                    train_tpr, train_fpr, test_tpr, test_fpr = self.calc_tpr_fpr()
 
-                    print('epoch %d (step %d), total_time: %g, mean_time: %g, '
-                          'training loss: %g, test loss: %g, tpr: %g, fpr: %g' %
-                          (epoch, curr_step, total_time, mean_time,
-                           train_loss, test_loss, tpr, fpr))
+                    print('(epoch: %d, step: %d), '
+                          '(total_time: %g, mean_time: %g), '
+                          '(training loss: %g, test loss: %g), '
+                          '(train_tpr: %g, train_fpr: %g test_tpr: %g, test_fpr: %g)' %
+                          (epoch, curr_step,
+                           total_time, mean_time,
+                           train_loss, test_loss,
+                           train_tpr, train_fpr, test_tpr, test_fpr))
 
                     image_filename = images_dir + '/' + str(row_index) + ".png"
                     run_filename = runs_dir + '/' + str(row_index) + ".txt"
 
                     f_runs.write('\t'.join(
                         [str(row_index),
-                         image_filename] +
+                         image_filename[len(out_dir)+1:]] +
                         self.param_str() +
                         [str(epoch),
+                         str(curr_step),
                          str(total_time),
                          str(mean_time),
                          str(train_loss),
                          str(test_loss),
-                         str(tpr),
-                         str(fpr)]) +
+                         str(train_tpr),
+                         str(train_fpr),
+                         str(test_tpr),
+                         str(test_fpr),
+                         ]) +
                                  '\n')
                     row_index += 1
                     self.save_plot(image_filename)
@@ -310,10 +349,39 @@ class Run:
 
 if __name__ == '__main__':
     run = Run()
-    run.execute_runs(run.MODE_FULL, 40)
+    run.execute_runs(run.MODE_PSA_RUNS, 400)
 
 
 """
+
+send data for big: 150,000
+
+
+give us images
+
+play with online tool and then play with this and tell the difference
+what online tool was useful for and what this was useful for
+
+for paper: what insights they got
+
+data questions:
+what correlations did ou find. can you explain
+relationship between number
+what about systep helped them
+which variable has most impact on training time.
+
+system questions
+what you found
+
+procedural analysis questions:
+what aspect easy to use
+what aspects hard to use
+what features missing
+
+
+readme: true is blue false is orange
+report actual numbers and use calculated to compute rates
+
 make two datasets: one flattened
 TODO:
 for mode=full, pregenerate several datasets with different noise levels 0, 10, 20, 30, 40, 50
