@@ -233,8 +233,8 @@ class Run:
         :return:
         """
         iter_index = -1
-        #mode_psa_datasets = DataSet.all_data_names
-        mode_psa_datasets = [DataSet.DATA_SPIRAL, DataSet.DATA_XOR, DataSet.DATA_GAUSS] # debug
+        mode_psa_datasets = DataSet.all_data_names
+        #mode_psa_datasets = [DataSet.DATA_SPIRAL, DataSet.DATA_XOR, DataSet.DATA_GAUSS] # debug
         while True:
             iter_index += 1
             if mode == self.MODE_FULL:
@@ -319,9 +319,9 @@ class Run:
                           '(training loss: %g, test loss: %g), '
                           '(train_tpr: %g, train_fpr: %g test_tpr: %g, test_fpr: %g)' %
                           (epoch, curr_step,
-                           total_time, mean_time,
-                           train_loss, test_loss,
-                           train_tpr, train_fpr, test_tpr, test_fpr))
+                           round(total_time, 2), round(mean_time, 2),
+                           round(train_loss, 2), round(test_loss, 2),
+                           round(train_tpr, 2), round(train_fpr, 2), round(test_tpr, 2), round(test_fpr, 2)))
 
                     image_filename = images_dir + '/' + str(row_index) + ".png"
                     run_filename = runs_dir + '/' + str(row_index) + ".txt"
@@ -332,14 +332,14 @@ class Run:
                         self.param_str() +
                         [str(epoch),
                          str(curr_step),
-                         str(total_time),
-                         str(mean_time),
-                         str(train_loss),
-                         str(test_loss),
-                         str(train_tpr),
-                         str(train_fpr),
-                         str(test_tpr),
-                         str(test_fpr),
+                         str(round(total_time, 3)),
+                         str(round(mean_time, 3)),
+                         str(round(train_loss, 3)),
+                         str(round(test_loss, 3)),
+                         str(round(train_tpr, 3)),
+                         str(round(train_fpr, 3)),
+                         str(round(test_tpr, 3)),
+                         str(round(test_fpr, 3)),
                          ]) +
                                  '\n')
                     row_index += 1
