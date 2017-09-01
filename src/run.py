@@ -233,8 +233,8 @@ class Run:
         :return:
         """
         iter_index = -1
-        mode_psa_datasets = DataSet.all_data_names
-        # mode_psa_datasets = [DataSet.DATA_SPIRAL] # debug
+        #mode_psa_datasets = DataSet.all_data_names
+        mode_psa_datasets = [DataSet.DATA_SPIRAL, DataSet.DATA_XOR, DataSet.DATA_GAUSS] # debug
         while True:
             iter_index += 1
             if mode == self.MODE_FULL:
@@ -310,7 +310,7 @@ class Run:
                     time_start = time.time()
                     test_loss, train_loss = self.nn.train(self.data, restart=False, num_steps=curr_step - prev_step)
                     total_time += (time.time() - time_start) * 1000.0
-                    mean_time = total_time / curr_step
+                    mean_time = total_time / epoch
 
                     train_tpr, train_fpr, test_tpr, test_fpr = self.calc_tpr_fpr()
 

@@ -37,7 +37,7 @@ class Classifier:
     regularization_names = [REGULARIZATION_NONE, REGULARIZATION_L1, REGULARIZATION_L2]
 
     def __init__(self):
-        self.session = tf.Session()
+        self.session = None
         self.activation_func = {
             self.ACTIVATION_RELU: tf.nn.relu,
             self.ACTIVATION_TANH: tf.nn.tanh,
@@ -55,6 +55,11 @@ class Classifier:
         self.features_ids = [DataSet.FEATURE_X1, DataSet.FEATURE_X2]  # list of selected feature IDs
 
     def build(self):
+        if self.session is not None:
+            self.session.close()
+            self.session = None
+        tf.reset_default_graph()
+        self.session = tf.Session()
         num_selected_features = len(self.features_ids)
 
         # could not figure out how to use the boolean_mask.
