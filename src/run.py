@@ -43,6 +43,7 @@ class Run:
     regularization_rates = [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
     range_hidden = [0, 6]
     range_hidden_neuron = [1, 8]
+    epochs_per_config = [25, 50, 100, 200, 400]  # number of epochs to run each nnet configuration for
 
     PARAM_TYPE_INT = 'int'
     PARAM_TYPE_DOUBLE = 'double'
@@ -223,13 +224,14 @@ class Run:
             stats = stats + [tpr, fpr]
         return stats
 
-    def execute_runs(self, mode, num_runs):
+    def execute_runs(self, mode, num_runs, resume=False):
         """
         Executes several training runs, each with different parameters and saves the results
         :param mode: experiment mode.
             MODE_FULL randomizes all parameters including the input data, per run
             MODE_PSA_RUNS generates different datasets and runs the psa separately for each
-        :param num_runs: number of runs per experiment
+        :param num_runs: number of runs per experiment to add to the output
+        :param resume: whether to resume the runs. if True, the runs will continue until there are num_runs records.
         :return:
         """
         iter_index = -1
@@ -241,7 +243,7 @@ class Run:
                 if iter_index == 1:
                     break
                 out_dir = '../output/full'
-                self.create_dir(out_dir, clean=True)
+                self.create_dir(out_dir, clean=not resume)
                 curr_data = None
             elif mode == self.MODE_PSA_RUNS:
                 if iter_index >= len(mode_psa_datasets):
@@ -249,15 +251,32 @@ class Run:
                 noise = 25
                 dataset_name = mode_psa_datasets[iter_index]
                 out_dir = '../output/' + dataset_name + '_' + str(noise)
-                self.create_dir(out_dir, clean=True)
-                curr_data = DataSet(dataset_name, num_samples=Run.num_samples, noise=noise)
-                curr_data.save_to_file(out_dir + '/input.txt')
+                self.create_dir(out_dir, clean=not resume)
+                input_filename = out_dir + '/input.txt'
+                if resume and os.path.exists(input_filename):
+                    curr_data = DataSet.create_from_file(input_filename)
+                    curr_data.noise = noise
+                    curr_data.dataset_name = dataset_name
+                    assert(curr_data.num_samples() == Run.num_samples)
+                else:
+                    curr_data = DataSet(dataset_name, num_samples=Run.num_samples, noise=noise)
+                    curr_data.save_to_file(input_filename)
             else:
                 print("Invalid mode:" + str(mode))
                 return
 
+            run_id = 0
+            index_filename = out_dir + '/index.txt'
+            print('index table: ' + index_filename)
+            if resume and os.path.exists(index_filename):
+                index_table = np.genfromtxt(index_filename, dtype=None, delimiter='\t', names=True, autostrip=False)
+                if len(index_table) > 0 and 'ID' in index_table.dtype.fields:
+                    run_id = index_table['ID'][-1] + 1
+                print('Resuming from ID {}'.format(run_id))
+
+            write_header = (not os.path.exists(index_filename)) or (not resume)
             # create write the header for the runs.txt file
-            f_runs = open(out_dir + '/index.txt', 'w')
+            f_runs = open(index_filename, 'a+' if resume else 'w+')
             all_param_info = \
                 ([['ID', 'ID', self.PARAM_TYPE_OUTPUT, 'ID'],
                   ['imagePath', 'Image path', self.PARAM_TYPE_OUTPUT, 'Output image path']] +
@@ -284,26 +303,29 @@ class Run:
                 fpi.write('\n'.join(['\t'.join(i) for i in all_param_info]))
 
             # write the header for the runs.txt
-            f_runs.write('\t'.join([i[0] for i in all_param_info]) + '\n')
+            if write_header:
+                f_runs.write('\t'.join([i[0] for i in all_param_info]) + '\n')
+                f_runs.flush()
             images_dir = out_dir + '/images'
             runs_dir = out_dir + '/runs'
-            self.create_dir(images_dir, clean=True)
-            self.create_dir(runs_dir, clean=True)
 
-            row_index = 0
-            for run_index in range(num_runs):
+            self.create_dir(images_dir, clean=not resume)
+            self.create_dir(runs_dir, clean=not resume)
+
+            while run_id < num_runs:
                 if curr_data is None:
                     self.randomize_data()  # randomize the data every time
                 else:
                     self.data = curr_data  # reuse the same data
                 self.randomize_training_params()
                 # print the parameters
-                print('(%d of %d)' % (run_index, num_runs))
+                print('configuration (%d of %d)' % (int(run_id / len(self.epochs_per_config)) + 1,
+                                                    int(num_runs / len(self.epochs_per_config))))
                 print(', '.join(a[0] + ': ' + a[1] for a in zip(self.param_names(), self.param_str())))
 
                 prev_step = 0
                 total_time = 0
-                for epoch in [25, 50, 100, 200, 400]:
+                for epoch in self.epochs_per_config:
                     curr_step = int(epoch * self.data.num_samples() / self.nn.batch_size)
                     # curr_step = epoch # in the online demo epoch == iter: https://github.com/tensorflow/playground/blob/67cf64ffe1fc53967d1c979d26d30a4625d18310/src/playground.ts#L898
 
@@ -323,11 +345,13 @@ class Run:
                            round(train_loss, 2), round(test_loss, 2),
                            round(train_tpr, 2), round(train_fpr, 2), round(test_tpr, 2), round(test_fpr, 2)))
 
-                    image_filename = images_dir + '/' + str(row_index) + ".png"
-                    run_filename = runs_dir + '/' + str(row_index) + ".txt"
+                    image_filename = images_dir + '/' + str(run_id) + ".png"
+                    run_filename = runs_dir + '/' + str(run_id) + ".txt"
+                    self.save_plot(image_filename)
+                    self.save_current_run(run_filename)
 
                     f_runs.write('\t'.join(
-                        [str(row_index),
+                        [str(run_id),
                          image_filename[len(out_dir)+1:]] +
                         self.param_str() +
                         [str(epoch),
@@ -342,15 +366,16 @@ class Run:
                          str(round(test_fpr, 3)),
                          ]) +
                                  '\n')
-                    row_index += 1
-                    self.save_plot(image_filename)
-                    self.save_current_run(run_filename)
+                    f_runs.flush()
                     prev_step = curr_step
-
+                    run_id += 1
+                    if run_id >= num_runs:
+                        break
+            f_runs.close()
 
 if __name__ == '__main__':
     run = Run()
-    run.execute_runs(run.MODE_PSA_RUNS, 1000)
+    run.execute_runs(run.MODE_PSA_RUNS, 10000, resume=True)
 
 
 """

@@ -73,6 +73,13 @@ class DataSet:
             self.labels = data_labels
 
     @staticmethod
+    def create_from_file(filename):
+        input_table = np.genfromtxt(filename, dtype=None, delimiter='\t', names=True, autostrip=False)
+        points = np.transpose(np.array([input_table['X1'], input_table['X2']]))
+        labels = input_table['label']
+        return DataSet(None, num_samples=len(points), noise=0, data_points=points, data_labels=labels)
+
+    @staticmethod
     def data_circle(num_samples, noise):
         """
         Generates the two circles dataset with the given number of samples and noise
