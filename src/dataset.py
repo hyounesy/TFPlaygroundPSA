@@ -77,6 +77,9 @@ class DataSet:
         input_table = np.genfromtxt(filename, dtype=None, delimiter='\t', names=True, autostrip=False)
         points = np.transpose(np.array([input_table['X1'], input_table['X2']]))
         labels = input_table['label']
+        for i in range(len(labels)):
+            if Config.SAVE_LABELS_NEG_POS and labels[i] == -1:
+                labels[i] = 0
         return DataSet(None, num_samples=len(points), noise=0, data_points=points, data_labels=labels)
 
     @staticmethod
