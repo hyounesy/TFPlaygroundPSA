@@ -1,2 +1,9 @@
-# cass2017_vis
-Assignment for the cass2017 (http://dap.vsb.cz/cass2017/) visualization workshop
+# Parameter space analysis of the Tensorflow playground neural network hyper parameters
+
+Python implementation of the [tensorflow playground online demo](playground.tensorflow.org).
+
+# Usage
+TBD
+
+# Example
+TBD
