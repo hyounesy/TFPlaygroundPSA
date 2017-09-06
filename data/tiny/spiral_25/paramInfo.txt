@@ -1,0 +1,36 @@
+label	name	type	info
+ID	ID	output	ID
+imagePath	Image path	output	Output image path
+data	Data	string	Which dataset do you want to use?
+noise	Noise	int	Noise
+training_ratio	Training Ratio	int	Ratio of training to test data
+batch_size	Batch Size	int	Batch Size
+X1	X1	int	X1
+X2	X2	int	X2
+X1Squared	X1Squared	int	X1Squared
+X2Squared	X2Squared	int	X2Squared
+X1X2	X1X2	int	X1X2
+sinX1	sinX1	int	sinX1
+sinX2	sinX2	int	sinX2
+layer_count	Layers Count	int	Number of hidden layers
+neuron_count	Neurons Count	int	Total number of neurons in all hidden layers
+H1	H1	int	H1
+H2	H2	int	H2
+H3	H3	int	H3
+H4	H4	int	H4
+H5	H5	int	H5
+H6	H6	int	H6
+learning_rate	Learning rate	double	Learning rate
+activation	Activation	string	Activation
+regularization	Regularization	string	Regularization
+regularization_rate	Regularization rate	double	Regularization rate
+epoch	Epoch	int	Number of Epochs (of processing all training data)
+iteration	Iterations	int	Number of Iterations (of processing a batch)
+total_time	Total time (ms)	output	Total time at this epoch
+mean_time	Mean time (ms)	output	Mean time per epoch
+train_loss	Training loss	output	Training loss at epoch
+test_loss	Test loss	output	Test loss at epoch
+train_TPR	TPR for train	output	True positive rate for training data
+train_FPR	FPR for train	output	False positive rate for training data
+test_TPR	TPR for test	output	True positive rate for test data
+test_FPR	FPR for test	output	False positive rate for test data
