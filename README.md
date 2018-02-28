@@ -1,6 +1,6 @@
 # Parameter space analysis of the Tensorflow playground neural network hyper parameters
 
-This is a python implementation of the [tensorflow playground online demo](playground.tensorflow.org) using tensorflow's python module.
+This is a python implementation of the [tensorflow playground online demo](http://playground.tensorflow.org) using tensorflow's python module.
 While the implementation is tried to be as close as possible to the online demo, you may find subtle differences between the outcomes of the two.
 
 We have used this implementation to try parameter space exploration in five different scenarios. For each scenario we have created many random configurations of the netural network by picking random values for each of the hyper parameters. For each neural network configuration, we training and tested the network and recorded statistics about the results at different epochs.
