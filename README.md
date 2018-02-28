@@ -57,3 +57,11 @@ train_FPR | output: float | False Positive Rate (rate of -1 points incorrectly c
 test_TPR | output: float | True Positive Rate (rate of +1 points correctly classified) on test data
 test_FPR | output: float | False Positive Rate (rate of -1 points incorrectly classified as +1) on test data
 
+### Analysis
+The video below demonstrates and example analysis using the [VisR framework](http://visrseq.github.io).
+
+<a href="https://www.youtube.com/embed/svh7LOX6eY4" target="_blank"><img src="http://img.youtube.com/vi/svh7LOX6eY4/0.jpg" 
+alt="Using parameter explorer app" width="560" height="315" border="10" /></a>
+
+Note: The parameter explorer app cannot currently load tables much larger than 10,000 rows due to memory limitation. You may use it on circle_25, xor_25, gauss_25 or spiral_25 datasets, but the parameter explorer app will not work on the full dataset (100,000 rows).
+
