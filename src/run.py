@@ -330,7 +330,7 @@ class Run:
                     # curr_step = epoch # in the online demo epoch == iter: https://github.com/tensorflow/playground/blob/67cf64ffe1fc53967d1c979d26d30a4625d18310/src/playground.ts#L898
 
                     time_start = time.time()
-                    test_loss, train_loss = self.nn.train(self.data, restart=False, num_steps=curr_step - prev_step)
+                    train_loss, test_loss = self.nn.train(self.data, restart=False, num_steps=curr_step - prev_step)
                     total_time += (time.time() - time_start) * 1000.0
                     mean_time = total_time / epoch
 
