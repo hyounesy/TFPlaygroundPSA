@@ -1,5 +1,5 @@
 # ==============================================================================
-# Copyright 2017 Hamid Younesy. All Rights Reserved.
+# Copyright 2018 Hamid Younesy. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,14 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-# sys.path.append('/Users/hyounesy/Research/cass2017_vis/src')
+# sys.path.append('/Users/hyounesy/Research/TFPlaygroundPSA/src')
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from dataset import DataSet
@@ -30,20 +29,42 @@ import random
 import os
 import shutil
 import time
+matplotlib.use('Agg')
+
 
 class Run:
     """
     A single run
     """
-    num_samples = 200  # always fixed
-    range_noise = list(range(0, 51, 5))
-    perc_train_values = list(range(10, 91, 10)) # percentage of training to test
+
+    num_samples = 200  # always a fixed number of data points
+    noise_values = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
+    perc_train_values = [10, 20, 30, 40, 50, 60, 70, 80, 90]  # percentage of training to test
     range_batch_size = [1, 30]
     learning_rates = [0.00001, 0.0001, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
     regularization_rates = [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
     range_hidden = [0, 6]
     range_hidden_neuron = [1, 8]
-    epochs_per_config = [25, 50, 100, 200, 400]  # number of epochs to run each nnet configuration for
+    epochs_per_config = [50, 100, 200, 400]  # number of epochs to run each nnet configuration for
+    activations_names = Classifier.activations_names
+    regularization_names = Classifier.regularization_names
+    fixed_feature_ids = None
+
+    # for debug:
+    """
+    num_samples = 200  # always a fixed number of data points
+    noise_values = [25]
+    perc_train_values = [50]  # percentage of training to test
+    range_batch_size = [10, 11]
+    learning_rates = [0.1]
+    regularization_rates = [3.0]
+    range_hidden = [3, 3]
+    range_hidden_neuron = [4, 4]
+    epochs_per_config = [400]  # number of epochs to run each nnet configuration for
+    activations_names = [Classifier.ACTIVATION_TANH]
+    regularization_names = [Classifier.REGULARIZATION_NONE]
+    fixed_feature_ids = [DataSet.FEATURE_X1SQ, DataSet.FEATURE_X2SQ, DataSet.FEATURE_SIN_X1, DataSet.FEATURE_SIN_X2]
+    """
 
     PARAM_TYPE_INT = 'int'
     PARAM_TYPE_DOUBLE = 'double'
@@ -52,6 +73,11 @@ class Run:
 
     MODE_FULL = 'full'  # a single directory, with randomized data for each run
     MODE_PSA_RUNS = 'psa_runs'  # a few randomized data, in separate directories
+
+    fixed_noise = 25
+
+    # mode_psa_datasets = DataSet.all_data_names
+    mode_psa_datasets = [DataSet.DATA_SPIRAL, DataSet.DATA_XOR, DataSet.DATA_CIRCLE, DataSet.DATA_GAUSS]  # debug
 
     def __init__(self):
         self.data = None
@@ -66,7 +92,7 @@ class Run:
         """
         # dataset parameters
         dataset_name = random.choice(DataSet.all_data_names) if dataset_name is None else dataset_name
-        noise = random.choice(self.range_noise) if noise is None else noise
+        noise = random.choice(self.noise_values) if noise is None else noise
         self.data = DataSet(dataset_name, self.num_samples, noise)
 
     def randomize_training_params(self):
@@ -80,14 +106,18 @@ class Run:
         self.nn.learning_rate = random.choice(self.learning_rates)
         self.nn.neurons_per_layer = [random.randint(*self.range_hidden_neuron)
                                      for _ in range(random.randint(*self.range_hidden))]
-        self.nn.activation_h = random.choice(Classifier.activations_names)
-        self.nn.regularization_type = random.choice(Classifier.regularization_names)
+        self.nn.activation_h = random.choice(self.activations_names)
+        self.nn.regularization_type = random.choice(self.regularization_names)
         self.nn.regularization_rate = random.choice(self.regularization_rates)
-        feature_ids = [i for i in range(DataSet.NUM_FEATURES)]
-        random.shuffle(feature_ids)
-        feature_ids = feature_ids[0: random.randint(1, len(feature_ids))]
-        feature_ids.sort()
-        self.nn.features_ids = feature_ids
+
+        # select which input features to use
+        if self.fixed_feature_ids is not None:
+            self.nn.features_ids = self.feature_ids
+        else:
+            # random
+            feature_bits = random.randint(0, pow(2, DataSet.NUM_FEATURES))
+            self.nn.features_ids = [i for i in range(DataSet.NUM_FEATURES) if feature_bits & pow(2, i) != 0]
+
         self.nn.build()
 
     @staticmethod
@@ -102,7 +132,7 @@ class Run:
                  ['batch_size', 'Batch Size', self.PARAM_TYPE_INT, 'Batch Size']] +
                 [[f, f, self.PARAM_TYPE_INT, f] for f in DataSet.feature_idx_to_name] +
                 [['layer_count', 'Layers Count', self.PARAM_TYPE_INT, 'Number of hidden layers'],
-                 ['neuron_count', 'Neurons Count', self.PARAM_TYPE_INT, 'Total number of neurons in all hidden layers']] +
+                 ['neuron_count', 'Neurons Count', self.PARAM_TYPE_INT, 'Total number of neurons in hidden layers']] +
                 [['H'+str(i), 'H'+str(i), self.PARAM_TYPE_INT, 'H'+str(i)] for i in range(1, max_hidden + 1)] +
                 [['learning_rate', 'Learning rate', self.PARAM_TYPE_DOUBLE, 'Learning rate'],
                  ['activation', 'Activation', self.PARAM_TYPE_STR, 'Activation'],
@@ -146,15 +176,18 @@ class Run:
         # matplotlib.interactive(False)
         # plot the resulting classifier
         colormap = colors.ListedColormap(["#f59322", "#e8eaeb", "#0877bd"])
-        x_min, x_max = -6, 6
-        y_min, y_max = -6, 6
+        x_min, x_max = -6, 6  # grid x bounds
+        y_min, y_max = -6, 6  # grid y bounds
         xx, yy = np.meshgrid(np.linspace(x_min, x_max, 300),
                              np.linspace(y_min, y_max, 300))
 
         data_points = np.c_[xx.ravel(), yy.ravel()]
         data_grid = DataSet(None, len(data_points), 0, data_points=data_points)
 
-        z = self.nn.predict_labels(data_grid.features).reshape(xx.shape)
+        try:
+            z = self.nn.predict_labels(data_grid.features).reshape(xx.shape)
+        except:
+            z = np.zeros(np.shape(xx))
         fig = plt.figure(figsize=(4, 4), dpi=75)
         # plt.imshow(z, cmap=colormap, interpolation='nearest')
         plt.contourf(xx, yy, z, cmap=colormap, alpha=0.8)
@@ -186,9 +219,12 @@ class Run:
             os.makedirs(dirname)
 
     def save_current_run(self, filename):
-        yp = self.nn.predict_labels(self.data.features)
+        try:
+            yp = self.nn.predict_labels(self.data.features)
+        except:
+            yp = 1 - self.data.labels
         if Config.SAVE_LABELS_NEG_POS:
-            yp = [-1 if label == 0 else label for label in yp]
+            yp = [-1 if label == 0 else 1 for label in yp]
         header = 'label_pred'
         with open(filename, 'w') as f:
             f.write(header + '\n')
@@ -235,8 +271,6 @@ class Run:
         :return:
         """
         iter_index = -1
-        mode_psa_datasets = DataSet.all_data_names
-        #mode_psa_datasets = [DataSet.DATA_SPIRAL, DataSet.DATA_XOR, DataSet.DATA_GAUSS] # debug
         while True:
             iter_index += 1
             if mode == self.MODE_FULL:
@@ -246,10 +280,10 @@ class Run:
                 self.create_dir(out_dir, clean=not resume)
                 curr_data = None
             elif mode == self.MODE_PSA_RUNS:
-                if iter_index >= len(mode_psa_datasets):
+                if iter_index >= len(self.mode_psa_datasets):
                     break
-                noise = 25
-                dataset_name = mode_psa_datasets[iter_index]
+                noise = self.fixed_noise
+                dataset_name = self.mode_psa_datasets[iter_index]
                 out_dir = '../output/' + dataset_name + '_' + str(noise)
                 self.create_dir(out_dir, clean=not resume)
                 input_filename = out_dir + '/input.txt'
@@ -266,7 +300,7 @@ class Run:
                 return
 
             run_id = 0
-            index_filename = out_dir + '/index.txt'
+            index_filename = out_dir + '/runsInfo.txt'
             print('index table: ' + index_filename)
             if resume and os.path.exists(index_filename):
                 index_table = np.genfromtxt(index_filename, dtype=None, delimiter='\t', names=True, autostrip=False)
@@ -283,6 +317,7 @@ class Run:
                  self.param_info() +
                  [['epoch', 'Epoch', self.PARAM_TYPE_INT, 'Number of Epochs (of processing all training data)'],
                   ['iteration', 'Iterations', self.PARAM_TYPE_INT, 'Number of Iterations (of processing a batch)'],
+                  ['success', 'Success', self.PARAM_TYPE_OUTPUT, 'Whether the training finished successfully'],
                   ['total_time', 'Total time (ms)', self.PARAM_TYPE_OUTPUT, 'Total time at this epoch'],
                   ['mean_time', 'Mean time (ms)', self.PARAM_TYPE_OUTPUT, 'Mean time per epoch'],
                   ['train_loss', 'Training loss', self.PARAM_TYPE_OUTPUT, 'Training loss at epoch'],
@@ -330,11 +365,23 @@ class Run:
                     # curr_step = epoch # in the online demo epoch == iter: https://github.com/tensorflow/playground/blob/67cf64ffe1fc53967d1c979d26d30a4625d18310/src/playground.ts#L898
 
                     time_start = time.time()
-                    train_loss, test_loss = self.nn.train(self.data, restart=False, num_steps=curr_step - prev_step)
+
+                    # train the network
+                    success = True
+                    try:
+                        train_loss, test_loss = self.nn.train(self.data, restart=False, num_steps=curr_step - prev_step)
+                    except:
+                        train_loss, test_loss = 1, 1
+                        success = False
+
                     total_time += (time.time() - time_start) * 1000.0
                     mean_time = total_time / epoch
 
-                    train_tpr, train_fpr, test_tpr, test_fpr = self.calc_tpr_fpr()
+                    try:
+                        train_tpr, train_fpr, test_tpr, test_fpr = self.calc_tpr_fpr()
+                    except:
+                        train_tpr, train_fpr, test_tpr, test_fpr = 0, 1, 0, 1
+                        success = False
 
                     print('(epoch: %d, step: %d), '
                           '(total_time: %g, mean_time: %g), '
@@ -356,6 +403,7 @@ class Run:
                         self.param_str() +
                         [str(epoch),
                          str(curr_step),
+                         str(success),
                          str(round(total_time, 3)),
                          str(round(mean_time, 3)),
                          str(round(train_loss, 3)),

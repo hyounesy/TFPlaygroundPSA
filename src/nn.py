@@ -77,29 +77,43 @@ class Classifier:
 
         regularizer = None
         if self.regularization_type == self.REGULARIZATION_L1:
-            regularizer = tf.contrib.layers.l1_regularizer(self.regularization_rate)
+            regularizer = tf.contrib.layers.l1_regularizer(scale=self.regularization_rate)
         elif self.regularization_type == self.REGULARIZATION_L2:
-            regularizer = tf.contrib.layers.l2_regularizer(self.regularization_rate)
+            regularizer = tf.contrib.layers.l2_regularizer(scale=self.regularization_rate)
 
-        with tf.variable_scope('layers', regularizer=regularizer):
+        with tf.variable_scope('layers'):
             num_hidden = len(self.neurons_per_layer)
             for ih in range(num_hidden):
                 next_dim = self.neurons_per_layer[ih]
-                w_h = tf.Variable(tf.random_normal([curr_dim, next_dim]), name='wh_'+str(ih))
-                w_b = tf.Variable(tf.zeros([next_dim]), name='bh_'+str(ih))
+                w_h = tf.get_variable(name='wh_'+str(ih), shape=[curr_dim, next_dim],
+                                      initializer=tf.random_normal_initializer, regularizer=regularizer)
+                w_b = tf.get_variable(name='bh_'+str(ih), shape=[next_dim], initializer=tf.zeros_initializer)
                 curr_dim = next_dim
                 curr_out = self.activation_func[self.activation_h](tf.matmul(curr_out, w_h) + w_b)
 
-            w_out = tf.Variable(tf.random_normal([curr_dim, Config.NUM_CLASSES]), name='w-out')
-            b_out = tf.Variable(tf.zeros([Config.NUM_CLASSES]), name='b-out')
+            w_out = tf.get_variable(name='w-out', shape=[curr_dim, Config.NUM_CLASSES],
+                                    initializer=tf.random_normal_initializer, regularizer=regularizer)
+            b_out = tf.get_variable(name='b-out', shape=[Config.NUM_CLASSES], initializer=tf.zeros_initializer)
             self.yp = (tf.matmul(curr_out, w_out) + b_out)  # predicted y
+            # output activation is always tanh: https://github.com/tensorflow/playground/blob/master/src/playground.ts#L956
             activation = tf.nn.tanh(self.yp)
 
         with tf.name_scope('loss'):
             cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=self.y1h, logits=activation, name='cross_entropy')
-            self.loss = tf.reduce_mean(cross_entropy, name='loss')
+            cross_entropy_loss = tf.reduce_mean(cross_entropy, name='cross_entropy_loss')
+
+            # loss value calculated in tf playground example: https://github.com/tensorflow/playground/blob/master/src/playground.ts#L845
+            # note: not adding 0.5 * because here the labels are 0 or 1 vs. in the web version labels are -1 or 1
+            self.tf_playground_loss = tf.reduce_mean(
+                tf.square(tf.cast(
+                    tf.not_equal(tf.argmax(self.yp, 1), tf.argmax(self.y1h, 1)), tf.float32)),
+                name='tf_playground_loss')
+
+            self.loss = cross_entropy_loss
             if regularizer:
-                self.loss = self.loss + sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+                self.loss += tf.reduce_mean(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+                # tf.contrib.layers.apply_regularization(regularizer)
+                # self.loss = self.loss + sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
 
         with tf.name_scope('optimizer'):
             # train_step = tf.train.AdamOptimizer(1e-4).minimize(loss)
@@ -143,10 +157,10 @@ class Classifier:
                                            self.y: batch_labels}, session=self.session)
         # compute test loss
         train_features, train_labels = data.get_training(self.perc_train)
-        train_loss = self.loss.eval(feed_dict={self.features: self.get_selected_features(train_features),
-                                               self.y: train_labels}, session=self.session)
+        train_loss = self.tf_playground_loss.eval(feed_dict={self.features: self.get_selected_features(train_features),
+                                                  self.y: train_labels}, session=self.session)
         # compute training loss
         test_features, test_labels = data.get_test(self.perc_train)
-        test_loss = self.loss.eval(feed_dict={self.features: self.get_selected_features(test_features),
-                                              self.y: test_labels}, session=self.session)
+        test_loss = self.tf_playground_loss.eval(feed_dict={self.features: self.get_selected_features(test_features),
+                                                 self.y: test_labels}, session=self.session)
         return train_loss, test_loss
